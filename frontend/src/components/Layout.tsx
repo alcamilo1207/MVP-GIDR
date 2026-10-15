@@ -22,11 +22,7 @@ export const Layout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100">
-      {/* Disclaimer legal e industrial API RP 754 */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-xs text-amber-800 dark:text-amber-300 text-center flex items-center justify-center gap-2">
-        <span className="font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-[10px] tracking-wide uppercase">Aviso Industrial</span>
-        <span>Este sistema es un apoyo a la toma de decisiones y <strong>no sustituye</strong> al Sistema Instrumentado de Seguridad (SIS) ni al juicio de ingeniería de procesos.</span>
-      </div>
+      {/* Header / Barra de navegación */}
 
       {/* Header / Barra de navegación */}
       <header className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 sticky top-0 z-30">
