@@ -113,7 +113,7 @@ def leer_tabla(contenido: bytes, nombre_archivo: str) -> list[dict[str, str]]:
     except Exception as exc:
         raise ErrorApi(400, "ARCHIVO_ILEGIBLE", f"No se pudo leer el archivo: {exc}") from exc
     return [
-        {normalizar_encabezado(k): ("" if v is None else str(v).strip()) for k, v in f.items() if k}
+        {normalizar_encabezado(str(k)): ("" if v is None else str(v).strip()) for k, v in f.items() if k}
         for f in filas
     ]
 

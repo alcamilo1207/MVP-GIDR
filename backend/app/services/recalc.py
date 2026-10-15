@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.domain.engine import BarreraEntrada, ConfigMotor, Impactos, ResultadoMotor, evaluar_escenario
@@ -17,12 +18,11 @@ from app.models import (
     Escenario,
     EscenarioBarrera,
     MatrizRiesgo,
+    Nodo,
     PalabraGuia,
     PoliticaEstado,
     ResultadoRiesgo,
-    Nodo,
     Unidad,
-    Site,
 )
 from app.services.audit import registrar
 
@@ -79,7 +79,7 @@ def evaluar_db(
     )
 
 
-def _query_escenarios():  # type: ignore[no-untyped-def]
+def _query_escenarios() -> Select[Any]:
     return select(Escenario).options(
         selectinload(Escenario.barreras).joinedload(EscenarioBarrera.barrera),
         joinedload(Escenario.palabra_guia)

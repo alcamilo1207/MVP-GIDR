@@ -8,7 +8,7 @@ Uso:  python -m app.seed            # carga si la base está vacía
 from __future__ import annotations
 
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -138,7 +138,7 @@ ESCENARIOS: list[tuple[str, str, str, str, str, str, tuple[int, int, int, int], 
 ]
 
 
-def filas_hazop(hoy: object | None = None) -> list[dict[str, str]]:
+def filas_hazop(hoy: date | None = None) -> list[dict[str, str]]:
     """Filas en formato de importación (claves canónicas) — la misma vía que un archivo real."""
     hoy = hoy or recalc.hoy()
     temporales = [  # (tag, desc, desde, hasta, moc, [(causa_idx, frr)])

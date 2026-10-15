@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg://gidr:gidr@localhost:5432/gidr"
-    jwt_secret: str = "cambiar-en-produccion"
+    jwt_secret: str = "cambiar-este-secreto-en-produccion-0123456789"
     jwt_algoritmo: str = "HS256"
     jwt_minutos: int = 480
     cors_origenes: str = "http://localhost:5173,http://localhost:3000"

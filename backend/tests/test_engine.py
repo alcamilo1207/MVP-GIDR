@@ -4,8 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.domain.engine import BarreraEntrada, ConfigMotor, Impactos, evaluar_escenario
-from app.domain.engine import core
+from app.domain.engine import BarreraEntrada, ConfigMotor, Impactos, core, evaluar_escenario
 from app.domain.engine.constants import matriz_defecto, puntaje_a_nivel
 
 HOY = date(2026, 10, 15)

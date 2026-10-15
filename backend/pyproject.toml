@@ -28,12 +28,12 @@ testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
-line-length = 110
+line-length = 130
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["B008"]
+ignore = ["B008", "E501", "UP046"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -42,3 +42,7 @@ ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true
 exclude = ["alembic/versions"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+"alembic/*" = ["E501", "I001", "UP"]

@@ -1,0 +1,8 @@
+tag_activo,estado,fuente,fecha,detalle
+PSV-101,EN_MANTENIMIENTO,SAP_PM_SIM,2026-10-14T12:35:06Z,"{""ot"": ""OT-100231"", ""nota"": ""Calibración y prueba de banco de PSV""}"
+SIS-R201-TSHH,FUERA_DE_SERVICIO,SAP_PM_SIM,2026-10-14T22:35:06Z,"{""ot"": ""OT-100245"", ""nota"": ""Falla de transmisor TT-201B, lazo en bypass""}"
+AL-H101-TAH,DEGRADADO,SAP_PM_SIM,2026-10-15T06:35:06Z,"{""ot"": ""OT-100250"", ""nota"": ""Alarma intermitente, respuesta de operador limitada""}"
+LSHH-T101,DEGRADADO,SAP_PM_SIM,2026-10-15T10:35:06Z,"{""ot"": ""OT-100258"", ""nota"": ""Deriva en medición de nivel""}"
+SIS-V202-LSLL,FUERA_DE_SERVICIO,SAP_PM_SIM,2026-10-15T13:35:06Z,"{""ot"": ""OT-100263"", ""nota"": ""Válvula XV-202 no cierra en prueba parcial""}"
+SIS-K201-VIB,EN_MANTENIMIENTO,SAP_PM_SIM,2026-10-15T16:35:06Z,"{""ot"": ""OT-100270"", ""nota"": ""Reemplazo de sondas de vibración""}"
+XV-999,FUERA_DE_SERVICIO,SAP_PM_SIM,2026-10-15T17:35:06Z,"{""nota"": ""Tag no existe en el HAZOP (ejemplo de no mapeado)""}"
