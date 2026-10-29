@@ -110,14 +110,13 @@ const PreventiveBarrierNode = ({
     frrDiseno: number
     frrEfectivo: number
     onEdit?: () => void
-    onDelete?: () => void
   }
 }) => {
   const esDegradada = data.estado !== 'DISPONIBLE'
   return (
     <div
       onClick={data.onEdit}
-      className={`w-48 group cursor-pointer shadow-md rounded-lg border-2 bg-white dark:bg-slate-900 p-2.5 transition-transform hover:scale-105 text-left relative ${
+      className={`w-48 cursor-pointer shadow-md rounded-lg border-2 bg-white dark:bg-slate-900 p-2.5 transition-transform hover:scale-105 text-left ${
         esDegradada ? 'border-red-500 ring-2 ring-red-500/20' : 'border-emerald-500'
       }`}
     >
@@ -126,26 +125,9 @@ const PreventiveBarrierNode = ({
         <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-100">
           {data.tag}
         </span>
-        <div className="flex items-center gap-1">
-          <span className={`chip text-[9px] ${ESTADO_CLASES[data.estado]}`}>
-            {ESTADO_ETIQUETA[data.estado]}
-          </span>
-          {data.onDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (confirm(`¿Eliminar la barrera ${data.tag}?`)) {
-                  data.onDelete!()
-                }
-              }}
-              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-1 py-0.5 rounded text-xs transition-opacity font-bold leading-none"
-              title="Eliminar barrera"
-            >
-              ✕
-            </button>
-          )}
-        </div>
+        <span className={`chip text-[9px] ${ESTADO_CLASES[data.estado]}`}>
+          {ESTADO_ETIQUETA[data.estado]}
+        </span>
       </div>
       <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 leading-tight">
         {data.desc}
@@ -182,14 +164,13 @@ const RecoveryBarrierNode = ({
     frrDiseno: number
     frrEfectivo: number
     onEdit?: () => void
-    onDelete?: () => void
   }
 }) => {
   const esDegradada = data.estado !== 'DISPONIBLE'
   return (
     <div
       onClick={data.onEdit}
-      className={`w-48 group cursor-pointer shadow-md rounded-lg border-2 bg-white dark:bg-slate-900 p-2.5 transition-transform hover:scale-105 text-left relative ${
+      className={`w-48 cursor-pointer shadow-md rounded-lg border-2 bg-white dark:bg-slate-900 p-2.5 transition-transform hover:scale-105 text-left ${
         esDegradada ? 'border-red-500 ring-2 ring-red-500/20' : 'border-emerald-500'
       }`}
     >
@@ -198,26 +179,9 @@ const RecoveryBarrierNode = ({
         <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-100">
           {data.tag}
         </span>
-        <div className="flex items-center gap-1">
-          <span className={`chip text-[9px] ${ESTADO_CLASES[data.estado]}`}>
-            {ESTADO_ETIQUETA[data.estado]}
-          </span>
-          {data.onDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                if (confirm(`¿Eliminar la barrera ${data.tag}?`)) {
-                  data.onDelete!()
-                }
-              }}
-              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-1 py-0.5 rounded text-xs transition-opacity font-bold leading-none"
-              title="Eliminar barrera"
-            >
-              ✕
-            </button>
-          )}
-        </div>
+        <span className={`chip text-[9px] ${ESTADO_CLASES[data.estado]}`}>
+          {ESTADO_ETIQUETA[data.estado]}
+        </span>
       </div>
       <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 leading-tight">
         {data.desc}
@@ -297,29 +261,14 @@ const ConsequenceNode = ({
 const EscalationFactorNode = ({
   data,
 }: {
-  data: { label: string; categoria?: string; onEdit?: () => void; onDelete?: () => void }
+  data: { label: string; categoria?: string; onEdit?: () => void }
 }) => (
   <div
     onClick={data.onEdit}
-    className="w-48 group cursor-pointer shadow-md rounded-lg overflow-hidden border-2 border-yellow-500 bg-white dark:bg-slate-900 transition-transform hover:scale-105 text-left relative"
+    className="w-48 cursor-pointer shadow-md rounded-lg overflow-hidden border-2 border-yellow-500 bg-white dark:bg-slate-900 group transition-transform hover:scale-105 text-left"
   >
     <div className="bg-yellow-400 text-yellow-950 px-2 py-1 flex justify-between items-center font-bold text-[9px] uppercase tracking-wider">
       <span>Factor Escalamiento</span>
-      {data.onDelete && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (confirm('¿Eliminar este factor de escalamiento?')) {
-              data.onDelete!()
-            }
-          }}
-          className="opacity-0 group-hover:opacity-100 text-yellow-950 hover:text-red-700 px-1 py-0.5 rounded text-xs transition-opacity font-bold leading-none"
-          title="Eliminar factor de escalamiento"
-        >
-          ✕
-        </button>
-      )}
     </div>
     <div className="p-2 text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">
       {data.label}
@@ -333,32 +282,15 @@ const EscalationFactorNode = ({
 const EscalationControlNode = ({
   data,
 }: {
-  data: { label: string; tag?: string; estado: Estado; onEdit?: () => void; onDelete?: () => void }
+  data: { label: string; tag?: string; estado: Estado; onEdit?: () => void }
 }) => (
   <div
     onClick={data.onEdit}
-    className="w-44 group cursor-pointer shadow-sm rounded border-2 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-left transition-transform hover:scale-105 relative"
+    className="w-44 cursor-pointer shadow-sm rounded border-2 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-left group transition-transform hover:scale-105"
   >
     <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-slate-400" />
-    <div className="flex justify-between items-center">
-      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-        Control EF Barrier
-      </div>
-      {data.onDelete && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (confirm('¿Eliminar este control?')) {
-              data.onDelete!()
-            }
-          }}
-          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 px-1 py-0.5 rounded text-xs transition-opacity font-bold leading-none"
-          title="Eliminar control"
-        >
-          ✕
-        </button>
-      )}
+    <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+      Control EF Barrier
     </div>
     <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 mt-0.5">
       {data.label}
@@ -399,6 +331,9 @@ export const BowTieView: React.FC = () => {
   // Modal / Inspector de bloque seleccionado
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState<BloqueSeleccionado | null>(null)
 
+  // Nodo marcado para eliminar (doble clic)
+  const [nodoAEliminar, setNodoAEliminar] = useState<{ id: string; label: string } | null>(null)
+
   // Tipo de bloque a añadir desde el panel de selección inferior izquierdo
   const [tipoBloqueAñadir, setTipoBloqueAñadir] = useState<string>('threat')
 
@@ -422,138 +357,6 @@ export const BowTieView: React.FC = () => {
       alert(`Error guardando BowTie: ${err.message}`)
     },
   })
-
-  // Guardar estado actual del layout y los bloques en la base de datos
-  const handleGuardarBowTie = useCallback(
-    (overrideBt?: BowTie) => {
-      const currentBt = overrideBt || bt
-      if (!currentBt) return
-
-      // Capturar posiciones actuales de los nodos
-      const layoutMap: Record<string, { x: number; y: number }> = {}
-      nodes.forEach((n) => {
-        layoutMap[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
-      })
-
-      const payload = {
-        peligro: currentBt.peligro,
-        evento_tope: currentBt.evento_tope,
-        causa: currentBt.causa,
-        frecuencia_diseno: currentBt.frecuencia_diseno,
-        consecuencia: currentBt.consecuencia,
-        imp_economico: currentBt.imp_economico,
-        imp_personas: currentBt.imp_personas,
-        imp_ambiente: currentBt.imp_ambiente,
-        imp_reputacion: currentBt.imp_reputacion,
-        barreras: [
-          ...currentBt.preventivas.map((p) => ({
-            tag_activo: p.tag_activo,
-            descripcion: p.descripcion,
-            tipo: p.tipo,
-            lado: 'PREVENTIVA',
-            frr_diseno: p.frr_diseno,
-            estado_actual: p.estado_actual,
-          })),
-          ...currentBt.mitigativas.map((m) => ({
-            tag_activo: m.tag_activo,
-            descripcion: m.descripcion,
-            tipo: m.tipo,
-            lado: 'MITIGATIVA',
-            frr_diseno: m.frr_diseno,
-            estado_actual: m.estado_actual,
-          })),
-        ],
-        factores_escalamiento: (currentBt.factores_escalamiento || []).map((fe) => ({
-          id: fe.id,
-          barrera_tag: fe.barrera_tag,
-          descripcion: fe.descripcion,
-          categoria: fe.categoria,
-          controles: (fe.controles || []).map((c) => ({
-            id: c.id,
-            descripcion: c.descripcion,
-            tag_activo: c.tag_activo,
-            estado_actual: c.estado_actual,
-          })),
-        })),
-        layout: layoutMap,
-      }
-
-      mutacionGuardar.mutate(payload)
-    },
-    [bt, nodes, mutacionGuardar]
-  )
-
-  // Eliminar un bloque del diagrama BowTie (Barrera, Factor de escalamiento o Control)
-  const eliminarBloque = useCallback(
-    (tipo: string, idOIdentificador: string | number) => {
-      if (!bt || !esAdmin) return
-
-      let cambiado = false
-
-      if (tipo === 'barrier' || tipo === 'prev' || tipo === 'mit') {
-        const tag = String(idOIdentificador).replace(/^(prev-|mit-)/, '')
-        const prevCount = bt.preventivas.length
-        const mitCount = bt.mitigativas.length
-
-        bt.preventivas = bt.preventivas.filter((b) => b.tag_activo !== tag)
-        bt.mitigativas = bt.mitigativas.filter((b) => b.tag_activo !== tag)
-
-        if (bt.preventivas.length !== prevCount || bt.mitigativas.length !== mitCount) {
-          cambiado = true
-          // Eliminar también factores de escalamiento que dependían de esta barrera
-          if (bt.factores_escalamiento) {
-            bt.factores_escalamiento = bt.factores_escalamiento.filter(
-              (fe) => fe.barrera_tag !== tag
-            )
-          }
-        }
-      } else if (tipo === 'escalationFactor' || tipo === 'fe') {
-        const feId = String(idOIdentificador).replace(/^fe-/, '')
-        const antLen = bt.factores_escalamiento?.length || 0
-        bt.factores_escalamiento = (bt.factores_escalamiento || []).filter(
-          (fe, idx) => String(fe.id || idx) !== feId && String(fe.id) !== feId
-        )
-        if ((bt.factores_escalamiento?.length || 0) !== antLen) {
-          cambiado = true
-        }
-      } else if (tipo === 'escalationControl' || tipo === 'ctrl') {
-        const ctrlId = String(idOIdentificador).replace(/^ctrl-/, '')
-        bt.factores_escalamiento?.forEach((fe) => {
-          const antCtrlLen = fe.controles?.length || 0
-          fe.controles = (fe.controles || []).filter(
-            (c, idx) => String(c.id || idx) !== ctrlId && String(c.id) !== ctrlId
-          )
-          if ((fe.controles?.length || 0) !== antCtrlLen) {
-            cambiado = true
-          }
-        })
-      }
-
-      if (cambiado) {
-        handleGuardarBowTie(bt)
-        setBloqueSeleccionado(null)
-      }
-    },
-    [bt, esAdmin, handleGuardarBowTie]
-  )
-
-  const onNodesDelete = useCallback(
-    (deletedNodes: Node[]) => {
-      if (!esAdmin || !bt) return
-      deletedNodes.forEach((node) => {
-        if (node.id.startsWith('prev-')) {
-          eliminarBloque('prev', node.id)
-        } else if (node.id.startsWith('mit-')) {
-          eliminarBloque('mit', node.id)
-        } else if (node.id.startsWith('fe-')) {
-          eliminarBloque('fe', node.id)
-        } else if (node.id.startsWith('ctrl-')) {
-          eliminarBloque('ctrl', node.id)
-        }
-      })
-    },
-    [esAdmin, bt, eliminarBloque]
-  )
 
   // Construcción del grafo de 8 bloques a partir de los datos
   useEffect(() => {
@@ -637,7 +440,6 @@ export const BowTieView: React.FC = () => {
               lado: 'PREVENTIVA',
               barrera: b,
             }),
-          onDelete: esAdmin ? () => eliminarBloque('barrier', b.tag_activo) : undefined,
         },
       })
 
@@ -687,7 +489,6 @@ export const BowTieView: React.FC = () => {
               lado: 'MITIGATIVA',
               barrera: b,
             }),
-          onDelete: esAdmin ? () => eliminarBloque('barrier', b.tag_activo) : undefined,
         },
       })
 
@@ -762,7 +563,6 @@ export const BowTieView: React.FC = () => {
               tipo: 'escalationFactor',
               factor: fe,
             }),
-          onDelete: esAdmin ? () => eliminarBloque('escalationFactor', fe.id || idx) : undefined,
         },
       })
 
@@ -788,7 +588,6 @@ export const BowTieView: React.FC = () => {
                   control: ctrl,
                   factorId: fe.id,
                 }),
-              onDelete: esAdmin ? () => eliminarBloque('escalationControl', ctrl.id || `${idx}-${cIdx}`) : undefined,
             },
           })
 
@@ -830,7 +629,7 @@ export const BowTieView: React.FC = () => {
 
     setNodes(nodeList)
     setEdges(edgeList)
-  }, [bt, esAdmin, setNodes, setEdges, eliminarBloque])
+  }, [bt, esAdmin, setNodes, setEdges])
 
   // ==========================================
   // 3. REGLAS DE CONEXIÓN LÓGICA E INTERACTIVA
@@ -893,8 +692,125 @@ export const BowTieView: React.FC = () => {
     [setEdges]
   )
 
+  // Guardar estado actual del layout y los bloques en la base de datos
+  const handleGuardarBowTie = () => {
+    if (!bt) return
+
+    // Capturar posiciones actuales de los nodos
+    const layoutMap: Record<string, { x: number; y: number }> = {}
+    nodes.forEach((n) => {
+      layoutMap[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
+    })
+
+    const payload = {
+      peligro: bt.peligro,
+      evento_tope: bt.evento_tope,
+      causa: bt.causa,
+      frecuencia_diseno: bt.frecuencia_diseno,
+      consecuencia: bt.consecuencia,
+      imp_economico: bt.imp_economico,
+      imp_personas: bt.imp_personas,
+      imp_ambiente: bt.imp_ambiente,
+      imp_reputacion: bt.imp_reputacion,
+      barreras: [
+        ...bt.preventivas.map((p) => ({
+          tag_activo: p.tag_activo,
+          descripcion: p.descripcion,
+          tipo: p.tipo,
+          lado: 'PREVENTIVA',
+          frr_diseno: p.frr_diseno,
+          estado_actual: p.estado_actual,
+        })),
+        ...bt.mitigativas.map((m) => ({
+          tag_activo: m.tag_activo,
+          descripcion: m.descripcion,
+          tipo: m.tipo,
+          lado: 'MITIGATIVA',
+          frr_diseno: m.frr_diseno,
+          estado_actual: m.estado_actual,
+        })),
+      ],
+      factores_escalamiento: (bt.factores_escalamiento || []).map((fe) => ({
+        id: fe.id,
+        barrera_tag: fe.barrera_tag,
+        descripcion: fe.descripcion,
+        categoria: fe.categoria,
+        controles: (fe.controles || []).map((c) => ({
+          id: c.id,
+          descripcion: c.descripcion,
+          tag_activo: c.tag_activo,
+          estado_actual: c.estado_actual,
+        })),
+      })),
+      layout: layoutMap,
+    }
+
+    mutacionGuardar.mutate(payload)
+  }
+
   // ==========================================
-  // 4. ACCIONES PARA AÑADIR / CONFIGURAR BLOQUES
+  // 4b. ELIMINAR BLOQUE (doble clic → confirmación)
+  // ==========================================
+  const handleEliminarNodo = useCallback(
+    (nodeId: string) => {
+      if (!bt || !esAdmin) return
+
+      // Bloques estructurales no eliminables
+      const noEliminables = ['hazard', 'topEvent']
+      if (noEliminables.includes(nodeId)) return
+
+      let nuevasPreventivas = bt.preventivas
+      let nuevasMitigativas = bt.mitigativas
+      let nuevosFactores = bt.factores_escalamiento || []
+
+      if (nodeId.startsWith('prev-')) {
+        const tag = nodeId.replace('prev-', '')
+        nuevasPreventivas = bt.preventivas.filter((b) => b.tag_activo !== tag)
+        // Eliminar factores vinculados a esta barrera
+        nuevosFactores = nuevosFactores.filter((fe) => fe.barrera_tag !== tag)
+      } else if (nodeId.startsWith('mit-')) {
+        const tag = nodeId.replace('mit-', '')
+        nuevasMitigativas = bt.mitigativas.filter((b) => b.tag_activo !== tag)
+        nuevosFactores = nuevosFactores.filter((fe) => fe.barrera_tag !== tag)
+      } else if (nodeId.startsWith('fe-')) {
+        const feIdx = nodeId.replace('fe-', '')
+        nuevosFactores = nuevosFactores.filter(
+          (fe, idx) => String(fe.id ?? idx) !== feIdx
+        )
+      } else if (nodeId.startsWith('ctrl-')) {
+        const ctrlIdStr = nodeId.replace('ctrl-', '')
+        nuevosFactores = nuevosFactores.map((fe) => ({
+          ...fe,
+          controles: (fe.controles || []).filter(
+            (c, cIdx) => String(c.id ?? cIdx) !== ctrlIdStr
+          ),
+        }))
+      } else if (nodeId === 'threat') {
+        // Threat: vaciar causa
+        bt.causa = 'Sin amenaza definida'
+        bt.frecuencia_diseno = 'E'
+      } else if (nodeId === 'consequence') {
+        // Consecuencia: no se elimina, sólo se resetea
+        bt.consecuencia = 'Sin consecuencia definida'
+        bt.imp_personas = 1
+        bt.imp_ambiente = 1
+        bt.imp_economico = 1
+        bt.imp_reputacion = 1
+      }
+
+      bt.preventivas = nuevasPreventivas
+      bt.mitigativas = nuevasMitigativas
+      bt.factores_escalamiento = nuevosFactores
+
+      setNodoAEliminar(null)
+      handleGuardarBowTie()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bt, esAdmin, nodes]
+  )
+
+  // ==========================================
+  // 4c. ACCIONES PARA AÑADIR / CONFIGURAR BLOQUES
   // ==========================================
   const abrirModalAgregar = (tipo: string) => {
     if (!bt) return
@@ -1011,7 +927,7 @@ export const BowTieView: React.FC = () => {
           {esAdmin && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleGuardarBowTie()}
+                onClick={handleGuardarBowTie}
                 disabled={mutacionGuardar.isPending}
                 className="btn-primary text-xs px-3.5 py-1.5 shadow flex items-center gap-1.5"
                 title="Guardar posiciones y cambios en base de datos"
@@ -1032,11 +948,31 @@ export const BowTieView: React.FC = () => {
           nodeTypes={nodeTypes}
           onNodesChange={esAdmin ? onNodesChange : undefined}
           onEdgesChange={esAdmin ? onEdgesChange : undefined}
-          onNodesDelete={esAdmin ? onNodesDelete : undefined}
           onConnect={esAdmin ? onConnect : undefined}
           isValidConnection={isValidConnection}
           nodesDraggable={esAdmin}
           nodesConnectable={esAdmin}
+          onNodeDoubleClick={
+            esAdmin
+              ? (_evt, node) => {
+                  // Bloques estructurales fijos: no se eliminan
+                  if (node.id === 'hazard' || node.id === 'topEvent') return
+                  const labelMap: Record<string, string> = {
+                    threat: 'Amenaza',
+                    consequence: 'Consecuencia',
+                  }
+                  let label = labelMap[node.id] ?? ''
+                  if (!label) {
+                    if (node.id.startsWith('prev-')) label = `Barrera Preventiva: ${node.id.replace('prev-', '')}`
+                    else if (node.id.startsWith('mit-')) label = `Barrera Reactiva: ${node.id.replace('mit-', '')}`
+                    else if (node.id.startsWith('fe-')) label = `Factor de Escalamiento`
+                    else if (node.id.startsWith('ctrl-')) label = `Control de Factor (EF Barrier)`
+                    else label = node.id
+                  }
+                  setNodoAEliminar({ id: node.id, label })
+                }
+              : undefined
+          }
           fitView
           fitViewOptions={{ padding: 0.15 }}
           minZoom={0.2}
@@ -1646,142 +1582,168 @@ export const BowTieView: React.FC = () => {
             </div>
 
             {/* Botones de acción del Modal */}
-            <div className="pt-2 flex justify-between items-center gap-2 border-t border-slate-100 dark:border-slate-800">
-              {/* Botón de Eliminar Bloque */}
-              {esAdmin &&
-                (bloqueSeleccionado.tipo === 'barrier' ||
-                  bloqueSeleccionado.tipo === 'escalationFactor' ||
-                  bloqueSeleccionado.tipo === 'escalationControl') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (bloqueSeleccionado.tipo === 'barrier') {
-                        if (
-                          confirm(
-                            `¿Eliminar la barrera ${bloqueSeleccionado.barrera.tag_activo} del BowTie?`
-                          )
-                        ) {
-                          eliminarBloque('barrier', bloqueSeleccionado.barrera.tag_activo)
-                        }
-                      } else if (bloqueSeleccionado.tipo === 'escalationFactor') {
-                        if (confirm('¿Eliminar este factor de escalamiento?')) {
-                          eliminarBloque('escalationFactor', bloqueSeleccionado.factor.id)
-                        }
-                      } else if (bloqueSeleccionado.tipo === 'escalationControl') {
-                        if (confirm('¿Eliminar este control EF?')) {
-                          eliminarBloque('escalationControl', bloqueSeleccionado.control.id)
-                        }
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setBloqueSeleccionado(null)}
+                className="btn-secondary text-xs"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  // Aplicar cambios en memoria y guardar en el backend
+                  const s = bloqueSeleccionado
+                  if (s.tipo === 'hazard') bt.peligro = s.valor
+                  if (s.tipo === 'topEvent') bt.evento_tope = s.valor
+                  if (s.tipo === 'threat') {
+                    bt.causa = s.causa
+                    bt.frecuencia_diseno = s.frecuencia
+                  }
+                  if (s.tipo === 'consequence') {
+                    bt.consecuencia = s.consecuencia
+                    bt.imp_personas = s.impPersonas
+                    bt.imp_ambiente = s.impAmbiente
+                    bt.imp_economico = s.impEconomico
+                    bt.imp_reputacion = s.impReputacion
+                  }
+                  if (s.tipo === 'barrier') {
+                    const list =
+                      s.lado === 'PREVENTIVA' ? bt.preventivas : bt.mitigativas
+                    const target = list.find(
+                      (x) => x.tag_activo === s.barrera.tag_activo
+                    )
+                    if (target) {
+                      target.descripcion = s.barrera.descripcion
+                      target.frr_diseno = s.barrera.frr_diseno
+                      target.estado_actual = s.barrera.estado_actual
+                    }
+                  }
+                  if (s.tipo === 'nuevaBarrera') {
+                    const nueva: BarreraEscenario = {
+                      barrera_id: 0,
+                      tag_activo: s.tag_activo,
+                      descripcion: s.descripcion,
+                      tipo: 'EXISTENTE',
+                      lado: s.lado,
+                      frr_diseno: s.frr_diseno,
+                      frr_efectivo: s.frr_diseno,
+                      estado_actual: 'DISPONIBLE',
+                      cuenta_en_diseno: true,
+                      vigente: true,
+                      vigencia_desde: null,
+                      vigencia_hasta: null,
+                      moc_ref: null,
+                    }
+                    if (s.lado === 'PREVENTIVA') {
+                      bt.preventivas.push(nueva)
+                    } else {
+                      bt.mitigativas.push(nueva)
+                    }
+                  }
+                  if (s.tipo === 'nuevoFactor') {
+                    const controles = s.controlesDesc
+                      ? [
+                          {
+                            descripcion: s.controlesDesc,
+                            tag_activo: `CTRL-${s.barrera_tag}`,
+                            estado_actual: 'DISPONIBLE' as const,
+                          },
+                        ]
+                      : []
+                    const nuevo = {
+                      barrera_tag: s.barrera_tag,
+                      descripcion: s.descripcion,
+                      categoria: s.categoria,
+                      controles,
+                    }
+                    if (!bt.factores_escalamiento) bt.factores_escalamiento = []
+                    bt.factores_escalamiento.push(nuevo)
+                  }
+                  if (s.tipo === 'escalationFactor') {
+                    const fe = bt.factores_escalamiento?.find(
+                      (x) => x.id === s.factor.id
+                    )
+                    if (fe) fe.descripcion = s.factor.descripcion
+                  }
+                  if (s.tipo === 'escalationControl') {
+                    bt.factores_escalamiento?.forEach((fe) => {
+                      const c = fe.controles?.find((x) => x.id === s.control.id)
+                      if (c) {
+                        c.descripcion = s.control.descripcion
+                        c.tag_activo = s.control.tag_activo
                       }
-                    }}
-                    className="text-xs px-2.5 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded flex items-center gap-1 font-semibold border border-red-200 dark:border-red-900 transition-colors"
-                  >
-                    <span>🗑️</span>
-                    <span>Eliminar Bloque</span>
-                  </button>
-                )}
+                    })
+                  }
+                  handleGuardarBowTie()
+                  setBloqueSeleccionado(null)
+                }}
+                className="btn-primary text-xs"
+              >
+                Aplicar y Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="flex gap-2 ml-auto">
-                <button
-                  type="button"
-                  onClick={() => setBloqueSeleccionado(null)}
-                  className="btn-secondary text-xs"
-                >
-                  Cerrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Aplicar cambios en memoria y guardar en el backend
-                    const s = bloqueSeleccionado
-                    if (s.tipo === 'hazard') bt.peligro = s.valor
-                    if (s.tipo === 'topEvent') bt.evento_tope = s.valor
-                    if (s.tipo === 'threat') {
-                      bt.causa = s.causa
-                      bt.frecuencia_diseno = s.frecuencia
-                    }
-                    if (s.tipo === 'consequence') {
-                      bt.consecuencia = s.consecuencia
-                      bt.imp_personas = s.impPersonas
-                      bt.imp_ambiente = s.impAmbiente
-                      bt.imp_economico = s.impEconomico
-                      bt.imp_reputacion = s.impReputacion
-                    }
-                    if (s.tipo === 'barrier') {
-                      const list =
-                        s.lado === 'PREVENTIVA' ? bt.preventivas : bt.mitigativas
-                      const target = list.find(
-                        (x) => x.tag_activo === s.barrera.tag_activo
-                      )
-                      if (target) {
-                        target.descripcion = s.barrera.descripcion
-                        target.frr_diseno = s.barrera.frr_diseno
-                        target.estado_actual = s.barrera.estado_actual
-                      }
-                    }
-                    if (s.tipo === 'nuevaBarrera') {
-                      const nueva: BarreraEscenario = {
-                        barrera_id: 0,
-                        tag_activo: s.tag_activo,
-                        descripcion: s.descripcion,
-                        tipo: 'EXISTENTE',
-                        lado: s.lado,
-                        frr_diseno: s.frr_diseno,
-                        frr_efectivo: s.frr_diseno,
-                        estado_actual: 'DISPONIBLE',
-                        cuenta_en_diseno: true,
-                        vigente: true,
-                        vigencia_desde: null,
-                        vigencia_hasta: null,
-                        moc_ref: null,
-                      }
-                      if (s.lado === 'PREVENTIVA') {
-                        bt.preventivas.push(nueva)
-                      } else {
-                        bt.mitigativas.push(nueva)
-                      }
-                    }
-                    if (s.tipo === 'nuevoFactor') {
-                      const controles = s.controlesDesc
-                        ? [
-                            {
-                              descripcion: s.controlesDesc,
-                              tag_activo: `CTRL-${s.barrera_tag}`,
-                              estado_actual: 'DISPONIBLE' as const,
-                            },
-                          ]
-                        : []
-                      const nuevo = {
-                        barrera_tag: s.barrera_tag,
-                        descripcion: s.descripcion,
-                        categoria: s.categoria,
-                        controles,
-                      }
-                      if (!bt.factores_escalamiento) bt.factores_escalamiento = []
-                      bt.factores_escalamiento.push(nuevo)
-                    }
-                    if (s.tipo === 'escalationFactor') {
-                      const fe = bt.factores_escalamiento?.find(
-                        (x) => x.id === s.factor.id
-                      )
-                      if (fe) fe.descripcion = s.factor.descripcion
-                    }
-                    if (s.tipo === 'escalationControl') {
-                      bt.factores_escalamiento?.forEach((fe) => {
-                        const c = fe.controles?.find((x) => x.id === s.control.id)
-                        if (c) {
-                          c.descripcion = s.control.descripcion
-                          c.tag_activo = s.control.tag_activo
-                        }
-                      })
-                    }
-                    handleGuardarBowTie()
-                    setBloqueSeleccionado(null)
-                  }}
-                  className="btn-primary text-xs"
-                >
-                  Aplicar y Guardar
-                </button>
+      {/* ========================================================
+          6. MODAL DE CONFIRMACIÓN DE ELIMINACIÓN (doble clic)
+          ======================================================== */}
+      {nodoAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border-2 border-red-500/50 max-w-sm w-full p-5 space-y-4">
+            {/* Encabezado */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950 flex items-center justify-center shrink-0">
+                <span className="text-red-600 text-lg font-black">⚠</span>
               </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Eliminar Bloque
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Esta acción se guardará en la base de datos.
+                </p>
+              </div>
+            </div>
+
+            {/* Detalle del bloque a eliminar */}
+            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2.5 text-xs">
+              <span className="text-slate-600 dark:text-slate-300">Bloque seleccionado: </span>
+              <span className="font-bold text-red-700 dark:text-red-300">{nodoAEliminar.label}</span>
+            </div>
+
+            {/* Advertencias contextuales */}
+            {(nodoAEliminar.id.startsWith('prev-') || nodoAEliminar.id.startsWith('mit-')) && (
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded px-2.5 py-1.5">
+                ⚠ Los factores de escalamiento vinculados a esta barrera también serán eliminados.
+              </p>
+            )}
+            {nodoAEliminar.id === 'threat' && (
+              <p className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded px-2.5 py-1.5">
+                ℹ La Amenaza será reemplazada por un valor por defecto (el bloque no se elimina del diagrama).
+              </p>
+            )}
+            {nodoAEliminar.id === 'consequence' && (
+              <p className="text-[10px] text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded px-2.5 py-1.5">
+                ℹ La Consecuencia será reseteada a valores mínimos (el bloque no se elimina del diagrama).
+              </p>
+            )}
+
+            {/* Botones */}
+            <div className="flex justify-end gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setNodoAEliminar(null)}
+                className="btn-secondary text-xs px-4 py-1.5"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleEliminarNodo(nodoAEliminar.id)}
+                className="text-xs px-4 py-1.5 rounded-lg font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                🗑 Confirmar Eliminación
+              </button>
             </div>
           </div>
         </div>
