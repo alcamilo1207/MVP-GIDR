@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import type { BowTie, Estado } from '../lib/types'
+import type { BowTie, Estado, BarreraEscenario } from '../lib/types'
 import { ESTADOS, ESTADO_CLASES, ESTADO_ETIQUETA, NIVEL_CLASES, fmtBrecha, fmtFrr } from '../lib/format'
 
 // ==========================================
@@ -330,6 +330,9 @@ export const BowTieView: React.FC = () => {
 
   // Modal / Inspector de bloque seleccionado
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState<BloqueSeleccionado | null>(null)
+
+  // Tipo de bloque a añadir desde el panel de selección inferior izquierdo
+  const [tipoBloqueAñadir, setTipoBloqueAñadir] = useState<string>('threat')
 
   // Consulta de datos completos del BowTie
   const { data: bt, isLoading } = useQuery<BowTie>({
@@ -729,7 +732,7 @@ export const BowTieView: React.FC = () => {
         barrera_tag: fe.barrera_tag,
         descripcion: fe.descripcion,
         categoria: fe.categoria,
-        controles: fe.controles.map((c) => ({
+        controles: (fe.controles || []).map((c) => ({
           id: c.id,
           descripcion: c.descripcion,
           tag_activo: c.tag_activo,
@@ -743,131 +746,60 @@ export const BowTieView: React.FC = () => {
   }
 
   // ==========================================
-  // 4. ACCIONES PARA AÑADIR NUEVOS BLOQUES
+  // 4. ACCIONES PARA AÑADIR / CONFIGURAR BLOQUES
   // ==========================================
-  const handleAgregarBarrera = (lado: 'PREVENTIVA' | 'MITIGATIVA') => {
+  const abrirModalAgregar = (tipo: string) => {
     if (!bt) return
-    const tag = prompt(`Ingrese el TAG de la nueva barrera ${lado}:`, `${lado === 'PREVENTIVA' ? 'SIS-NEW' : 'PSV-NEW'}`)
-    if (!tag) return
-    const desc = prompt('Descripción de la barrera:', 'Lazo instrumentado de seguridad') || 'Barrera sin descripción'
-    const frr = Number(prompt('Factor de Reducción de Riesgo (FRR diseño, ej. 10, 100):', '100')) || 100
 
-    const nuevaBarrera = {
-      tag_activo: tag,
-      descripcion: desc,
-      tipo: 'EXISTENTE' as const,
-      lado,
-      frr_diseno: frr,
-      estado_actual: 'DISPONIBLE' as const,
+    if (tipo === 'threat') {
+      setBloqueSeleccionado({
+        tipo: 'threat',
+        causa: bt.causa || 'Falla operacional o pérdida de contención',
+        frecuencia: bt.frecuencia_diseno || 'C',
+      })
+    } else if (tipo === 'prev') {
+      setBloqueSeleccionado({
+        tipo: 'nuevaBarrera',
+        lado: 'PREVENTIVA',
+        tag_activo: `SIS-0${bt.preventivas.length + 1}`,
+        descripcion: 'Sistema Instrumentado de Seguridad Preventivo',
+        frr_diseno: 100,
+      })
+    } else if (tipo === 'mit') {
+      setBloqueSeleccionado({
+        tipo: 'nuevaBarrera',
+        lado: 'MITIGATIVA',
+        tag_activo: `PSV-0${bt.mitigativas.length + 1}`,
+        descripcion: 'Válvula de alivio / Sistema de mitigación',
+        frr_diseno: 10,
+      })
+    } else if (tipo === 'consequence') {
+      setBloqueSeleccionado({
+        tipo: 'consequence',
+        consecuencia: bt.consecuencia || 'Impacto a personas e infraestructura',
+        impPersonas: bt.imp_personas || 3,
+        impAmbiente: bt.imp_ambiente || 2,
+        impEconomico: bt.imp_economico || 3,
+        impReputacion: bt.imp_reputacion || 2,
+      })
+    } else if (tipo === 'fe') {
+      const todasBarreras = [...bt.preventivas, ...bt.mitigativas].map((b) => b.tag_activo)
+      if (todasBarreras.length === 0) {
+        alert('Debe existir al menos una barrera en el BowTie para vincular un factor de escalamiento.')
+        return
+      }
+      setBloqueSeleccionado({
+        tipo: 'nuevoFactor',
+        barrera_tag: todasBarreras[0],
+        descripcion: 'Falla en suministro de aire comprimido o energía',
+        categoria: 'OPERACIONAL',
+        controlesDesc: 'Control de redundancia y suministro de respaldo',
+      })
     }
-
-    const payload = {
-      peligro: bt.peligro,
-      evento_tope: bt.evento_tope,
-      causa: bt.causa,
-      frecuencia_diseno: bt.frecuencia_diseno,
-      consecuencia: bt.consecuencia,
-      imp_economico: bt.imp_economico,
-      imp_personas: bt.imp_personas,
-      imp_ambiente: bt.imp_ambiente,
-      imp_reputacion: bt.imp_reputacion,
-      barreras: [
-        ...bt.preventivas.map((p) => ({
-          tag_activo: p.tag_activo,
-          descripcion: p.descripcion,
-          tipo: p.tipo,
-          lado: 'PREVENTIVA',
-          frr_diseno: p.frr_diseno,
-          estado_actual: p.estado_actual,
-        })),
-        ...bt.mitigativas.map((m) => ({
-          tag_activo: m.tag_activo,
-          descripcion: m.descripcion,
-          tipo: m.tipo,
-          lado: 'MITIGATIVA',
-          frr_diseno: m.frr_diseno,
-          estado_actual: m.estado_actual,
-        })),
-        nuevaBarrera,
-      ],
-      factores_escalamiento: (bt.factores_escalamiento || []).map((fe) => ({
-        id: fe.id,
-        barrera_tag: fe.barrera_tag,
-        descripcion: fe.descripcion,
-        categoria: fe.categoria,
-        controles: fe.controles,
-      })),
-    }
-
-    mutacionGuardar.mutate(payload)
   }
 
-  const handleAgregarFactorEscalamiento = () => {
-    if (!bt) return
-    const barrerasTags = [...bt.preventivas, ...bt.mitigativas].map((b) => b.tag_activo)
-    if (barrerasTags.length === 0) {
-      alert('Debe existir al menos una barrera para vincular un factor de escalamiento.')
-      return
-    }
-    const tag = prompt(`¿A qué barrera afecta este factor? (${barrerasTags.join(', ')}):`, barrerasTags[0])
-    if (!tag || !barrerasTags.includes(tag)) return
-    const desc = prompt('Descripción del Factor de Escalamiento (ej. Falla de aire de instrumentos, congelamiento):', 'Falla de aire comprimido')
-    if (!desc) return
-
-    const nuevoFactor = {
-      barrera_tag: tag,
-      descripcion: desc,
-      categoria: 'OPERACIONAL',
-      controles: [
-        {
-          descripcion: 'Control/Redundancia de suministro',
-          tag_activo: 'CTRL-01',
-          estado_actual: 'DISPONIBLE' as const,
-        },
-      ],
-    }
-
-    const payload = {
-      peligro: bt.peligro,
-      evento_tope: bt.evento_tope,
-      causa: bt.causa,
-      frecuencia_diseno: bt.frecuencia_diseno,
-      consecuencia: bt.consecuencia,
-      imp_economico: bt.imp_economico,
-      imp_personas: bt.imp_personas,
-      imp_ambiente: bt.imp_ambiente,
-      imp_reputacion: bt.imp_reputacion,
-      barreras: [
-        ...bt.preventivas.map((p) => ({
-          tag_activo: p.tag_activo,
-          descripcion: p.descripcion,
-          tipo: p.tipo,
-          lado: 'PREVENTIVA',
-          frr_diseno: p.frr_diseno,
-          estado_actual: p.estado_actual,
-        })),
-        ...bt.mitigativas.map((m) => ({
-          tag_activo: m.tag_activo,
-          descripcion: m.descripcion,
-          tipo: m.tipo,
-          lado: 'MITIGATIVA',
-          frr_diseno: m.frr_diseno,
-          estado_actual: m.estado_actual,
-        })),
-      ],
-      factores_escalamiento: [
-        ...(bt.factores_escalamiento || []).map((fe) => ({
-          id: fe.id,
-          barrera_tag: fe.barrera_tag,
-          descripcion: fe.descripcion,
-          categoria: fe.categoria,
-          controles: fe.controles,
-        })),
-        nuevoFactor,
-      ],
-    }
-
-    mutacionGuardar.mutate(payload)
+  const handleEjecutarAgregarBloque = () => {
+    abrirModalAgregar(tipoBloqueAñadir)
   }
 
   if (isLoading || !bt) {
@@ -931,32 +863,13 @@ export const BowTieView: React.FC = () => {
           {esAdmin && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleAgregarBarrera('PREVENTIVA')}
-                className="btn-secondary text-xs px-2.5 py-1"
-                title="Añadir Barrera Preventiva"
-              >
-                + Barrera Prev.
-              </button>
-              <button
-                onClick={() => handleAgregarBarrera('MITIGATIVA')}
-                className="btn-secondary text-xs px-2.5 py-1"
-                title="Añadir Barrera Reactiva"
-              >
-                + Barrera React.
-              </button>
-              <button
-                onClick={handleAgregarFactorEscalamiento}
-                className="btn-secondary text-xs px-2.5 py-1 bg-yellow-50 dark:bg-yellow-950/40 text-yellow-800 dark:text-yellow-200"
-                title="Añadir Factor de Escalamiento"
-              >
-                + Factor Escalada
-              </button>
-              <button
                 onClick={handleGuardarBowTie}
                 disabled={mutacionGuardar.isPending}
-                className="btn-primary text-xs px-3.5 py-1 shadow"
+                className="btn-primary text-xs px-3.5 py-1.5 shadow flex items-center gap-1.5"
+                title="Guardar posiciones y cambios en base de datos"
               >
-                {mutacionGuardar.isPending ? 'Guardando...' : '💾 Guardar BowTie'}
+                <span>💾</span>
+                <span>{mutacionGuardar.isPending ? 'Guardando...' : 'Guardar BowTie'}</span>
               </button>
             </div>
           )}
@@ -996,21 +909,108 @@ export const BowTieView: React.FC = () => {
           </span>
         </div>
 
-        {/* Leyenda Metodológica de los 8 Bloques */}
-        <div className="absolute bottom-3 left-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur border border-slate-200 dark:border-slate-800 p-2.5 rounded-lg text-[10px] space-y-1 shadow-md max-w-sm hidden md:block">
-          <div className="font-bold text-slate-700 dark:text-slate-300">
-            Bloques Metodología BowTie:
+        {/* Panel de Selección para Agregar Bloques BowTie */}
+        <div className="absolute bottom-3 left-3 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-xl w-72 text-xs">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-slate-800">
+            <span className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-brand-600"></span>
+              Agregar Bloques BowTie
+            </span>
+            {esAdmin ? (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Admin
+              </span>
+            ) : (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                Lector
+              </span>
+            )}
           </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-600 dark:text-slate-400">
-            <div>1. Peligro (Hazard)</div>
-            <div>2. Evento Tope (Top Event)</div>
-            <div>3. Amenaza (Threat)</div>
-            <div>4. Barrera Preventiva</div>
-            <div>5. Barrera Reactiva</div>
-            <div>6. Consecuencia</div>
-            <div>7. Factor Escalamiento</div>
-            <div>8. Control Factor (EF)</div>
-          </div>
+
+          {esAdmin ? (
+            <div className="space-y-2.5">
+              <div>
+                <label htmlFor="select-tipo-bloque" className="text-[10px] text-slate-500 block mb-1">
+                  Seleccionar tipo de bloque:
+                </label>
+                <div className="flex gap-1.5">
+                  <select
+                    id="select-tipo-bloque"
+                    aria-label="Seleccionar tipo de bloque BowTie"
+                    value={tipoBloqueAñadir}
+                    onChange={(e) => setTipoBloqueAñadir(e.target.value)}
+                    className="input text-xs py-1 px-2 flex-1 h-8"
+                  >
+                    <option value="threat">Amenaza (Threat)</option>
+                    <option value="prev">Barrera Preventiva</option>
+                    <option value="mit">Barrera Reactiva</option>
+                    <option value="consequence">Consecuencia</option>
+                    <option value="fe">Factor de Escalamiento</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleEjecutarAgregarBloque}
+                    className="btn-primary text-xs px-3 h-8 flex items-center justify-center font-bold"
+                    title="Agregar bloque seleccionado"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Botones directos de acceso rápido a los bloques solicitados */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => abrirModalAgregar('threat')}
+                  className="flex items-center gap-1.5 p-1.5 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 hover:bg-blue-100 transition-colors text-left"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                  <span className="font-medium truncate">+ Amenaza</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => abrirModalAgregar('prev')}
+                  className="flex items-center gap-1.5 p-1.5 rounded border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 transition-colors text-left"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span className="font-medium truncate">+ Barrera Prev.</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => abrirModalAgregar('mit')}
+                  className="flex items-center gap-1.5 p-1.5 rounded border border-teal-200 dark:border-teal-900 bg-teal-50/60 dark:bg-teal-950/40 text-teal-900 dark:text-teal-200 hover:bg-teal-100 transition-colors text-left"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0"></span>
+                  <span className="font-medium truncate">+ Barrera React.</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => abrirModalAgregar('consequence')}
+                  className="flex items-center gap-1.5 p-1.5 rounded border border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 hover:bg-rose-100 transition-colors text-left"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span className="font-medium truncate">+ Consecuencia</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => abrirModalAgregar('fe')}
+                  className="col-span-2 flex items-center gap-1.5 p-1.5 rounded border border-yellow-200 dark:border-yellow-900 bg-yellow-50/60 dark:bg-yellow-950/40 text-yellow-900 dark:text-yellow-200 hover:bg-yellow-100 transition-colors text-left"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 shrink-0"></span>
+                  <span className="font-medium truncate">+ Factor de Escalamiento</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+              Inicie sesión como administrador para agregar bloques de Amenaza, Barreras, Consecuencias o Factores de Escalamiento.
+            </div>
+          )}
         </div>
       </div>
 
@@ -1022,7 +1022,11 @@ export const BowTieView: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-5 space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Editar Atributos: {bloqueSeleccionado.tipo}
+                {bloqueSeleccionado.tipo === 'nuevaBarrera'
+                  ? `Agregar Barrera ${bloqueSeleccionado.lado === 'PREVENTIVA' ? 'Preventiva' : 'Reactiva'}`
+                  : bloqueSeleccionado.tipo === 'nuevoFactor'
+                  ? 'Agregar Factor de Escalamiento'
+                  : `Editar Atributos: ${bloqueSeleccionado.tipo}`}
               </h3>
               <button
                 onClick={() => setBloqueSeleccionado(null)}
@@ -1351,6 +1355,145 @@ export const BowTieView: React.FC = () => {
                   </div>
                 </>
               )}
+
+              {/* Formulario para Nueva Barrera */}
+              {bloqueSeleccionado.tipo === 'nuevaBarrera' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Lado de la Barrera</label>
+                    <select
+                      className="input"
+                      value={bloqueSeleccionado.lado}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          lado: e.target.value as 'PREVENTIVA' | 'MITIGATIVA',
+                        })
+                      }
+                    >
+                      <option value="PREVENTIVA">Preventiva (Antes del Evento Tope)</option>
+                      <option value="MITIGATIVA">Reactiva / Mitigativa (Después del Evento Tope)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">TAG Activo</label>
+                    <input
+                      type="text"
+                      className="input font-mono"
+                      value={bloqueSeleccionado.tag_activo}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          tag_activo: e.target.value.toUpperCase(),
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Descripción de la Barrera</label>
+                    <textarea
+                      className="input h-16"
+                      value={bloqueSeleccionado.descripcion}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          descripcion: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Factor de Reducción de Riesgo (FRR Diseño)</label>
+                    <select
+                      className="input"
+                      value={bloqueSeleccionado.frr_diseno}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          frr_diseno: Number(e.target.value),
+                        })
+                      }
+                    >
+                      <option value={10}>FRR 10 (SIL 1 - RRF 10)</option>
+                      <option value={50}>FRR 50 (SIL 1.5 - RRF 50)</option>
+                      <option value={100}>FRR 100 (SIL 2 - RRF 100)</option>
+                      <option value={1000}>FRR 1000 (SIL 3 - RRF 1000)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Formulario para Nuevo Factor de Escalamiento */}
+              {bloqueSeleccionado.tipo === 'nuevoFactor' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Barrera Afectada por el Factor</label>
+                    <select
+                      className="input font-mono"
+                      value={bloqueSeleccionado.barrera_tag}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          barrera_tag: e.target.value,
+                        })
+                      }
+                    >
+                      {[...bt.preventivas, ...bt.mitigativas].map((b) => (
+                        <option key={b.tag_activo} value={b.tag_activo}>
+                          {b.tag_activo} ({b.lado === 'PREVENTIVA' ? 'Prev.' : 'React.'}) - {b.descripcion.slice(0, 30)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Descripción del Factor de Escalamiento</label>
+                    <textarea
+                      className="input h-16"
+                      placeholder="Ej: Falla en suministro de aire comprimido o energía"
+                      value={bloqueSeleccionado.descripcion}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          descripcion: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Categoría</label>
+                    <select
+                      className="input"
+                      value={bloqueSeleccionado.categoria}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          categoria: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="OPERACIONAL">OPERACIONAL</option>
+                      <option value="MECANICO">MECÁNICO / EQUIPO</option>
+                      <option value="AMBIENTAL">AMBIENTAL / CLIMÁTICO</option>
+                      <option value="HUMANO">FACTOR HUMANO</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Control del Factor / EF Barrier (Opcional)</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Ej: Control de redundancia y suministro de respaldo"
+                      value={bloqueSeleccionado.controlesDesc}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          controlesDesc: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Botones de acción del Modal */}
@@ -1389,6 +1532,47 @@ export const BowTieView: React.FC = () => {
                       target.frr_diseno = s.barrera.frr_diseno
                       target.estado_actual = s.barrera.estado_actual
                     }
+                  }
+                  if (s.tipo === 'nuevaBarrera') {
+                    const nueva: BarreraEscenario = {
+                      barrera_id: 0,
+                      tag_activo: s.tag_activo,
+                      descripcion: s.descripcion,
+                      tipo: 'EXISTENTE',
+                      lado: s.lado,
+                      frr_diseno: s.frr_diseno,
+                      frr_efectivo: s.frr_diseno,
+                      estado_actual: 'DISPONIBLE',
+                      cuenta_en_diseno: true,
+                      vigente: true,
+                      vigencia_desde: null,
+                      vigencia_hasta: null,
+                      moc_ref: null,
+                    }
+                    if (s.lado === 'PREVENTIVA') {
+                      bt.preventivas.push(nueva)
+                    } else {
+                      bt.mitigativas.push(nueva)
+                    }
+                  }
+                  if (s.tipo === 'nuevoFactor') {
+                    const controles = s.controlesDesc
+                      ? [
+                          {
+                            descripcion: s.controlesDesc,
+                            tag_activo: `CTRL-${s.barrera_tag}`,
+                            estado_actual: 'DISPONIBLE' as const,
+                          },
+                        ]
+                      : []
+                    const nuevo = {
+                      barrera_tag: s.barrera_tag,
+                      descripcion: s.descripcion,
+                      categoria: s.categoria,
+                      controles,
+                    }
+                    if (!bt.factores_escalamiento) bt.factores_escalamiento = []
+                    bt.factores_escalamiento.push(nuevo)
                   }
                   if (s.tipo === 'escalationFactor') {
                     const fe = bt.factores_escalamiento?.find(
