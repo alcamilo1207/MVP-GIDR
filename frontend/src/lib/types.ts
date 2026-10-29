@@ -93,7 +93,8 @@ export interface BowTie {
   consecuencias: { categoria: string; nivel: number; texto: string }[]
   factores_escalamiento: FactorEscalamiento[]
   resultado: Resultado | null
-  layout?: Record<string, { x: number; y: number }> | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  layout?: Record<string, any> | null
 }
 
 export interface Api754 {

@@ -331,6 +331,9 @@ export const BowTieView: React.FC = () => {
   // Modal / Inspector de bloque seleccionado
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState<BloqueSeleccionado | null>(null)
 
+  // Modal para confirmar eliminación de bloque al hacer doble clic
+  const [nodoAEliminar, setNodoAEliminar] = useState<Node | null>(null)
+
   // Tipo de bloque a añadir desde el panel de selección inferior izquierdo
   const [tipoBloqueAñadir, setTipoBloqueAñadir] = useState<string>('threat')
 
@@ -360,6 +363,8 @@ export const BowTieView: React.FC = () => {
     if (!bt) return
 
     const layout = bt.layout || {}
+    const layoutPositions = layout.positions || layout
+    const savedEdges: Edge[] | undefined = layout.edges
     const nodeList: Node[] = []
     const edgeList: Edge[] = []
 
@@ -367,7 +372,7 @@ export const BowTieView: React.FC = () => {
     nodeList.push({
       id: 'hazard',
       type: 'hazardNode',
-      position: layout['hazard'] || { x: 570, y: 30 },
+      position: layoutPositions['hazard'] || { x: 570, y: 30 },
       data: {
         label: bt.peligro,
         onEdit: () => esAdmin && setBloqueSeleccionado({ tipo: 'hazard', valor: bt.peligro }),
@@ -378,7 +383,7 @@ export const BowTieView: React.FC = () => {
     nodeList.push({
       id: 'topEvent',
       type: 'topEventNode',
-      position: layout['topEvent'] || { x: 550, y: 220 },
+      position: layoutPositions['topEvent'] || { x: 550, y: 220 },
       data: {
         label: bt.evento_tope,
         riesgoActual: bt.resultado?.riesgo_actual || 'Bajo',
@@ -401,7 +406,7 @@ export const BowTieView: React.FC = () => {
     nodeList.push({
       id: 'threat',
       type: 'threatNode',
-      position: layout['threat'] || { x: 50, y: 230 },
+      position: layoutPositions['threat'] || { x: 50, y: 230 },
       data: {
         label: bt.causa,
         frecuencia: bt.frecuencia_diseno,
@@ -423,7 +428,7 @@ export const BowTieView: React.FC = () => {
       nodeList.push({
         id: bId,
         type: 'preventiveBarrierNode',
-        position: layout[bId] || posDefecto,
+        position: layoutPositions[bId] || posDefecto,
         data: {
           tag: b.tag_activo,
           desc: b.descripcion,
@@ -472,7 +477,7 @@ export const BowTieView: React.FC = () => {
       nodeList.push({
         id: bId,
         type: 'recoveryBarrierNode',
-        position: layout[bId] || posDefecto,
+        position: layoutPositions[bId] || posDefecto,
         data: {
           tag: b.tag_activo,
           desc: b.descripcion,
@@ -509,7 +514,7 @@ export const BowTieView: React.FC = () => {
     nodeList.push({
       id: 'consequence',
       type: 'consequenceNode',
-      position: layout['consequence'] || posConsDefecto,
+      position: layoutPositions['consequence'] || posConsDefecto,
       data: {
         label: bt.consecuencia,
         impPersonas: bt.imp_personas,
@@ -550,7 +555,7 @@ export const BowTieView: React.FC = () => {
       nodeList.push({
         id: feId,
         type: 'escalationFactorNode',
-        position: layout[feId] || { x: 120 + idx * 240, y: 430 },
+        position: layoutPositions[feId] || { x: 120 + idx * 240, y: 430 },
         data: {
           label: fe.descripcion,
           categoria: fe.categoria,
@@ -573,7 +578,7 @@ export const BowTieView: React.FC = () => {
           nodeList.push({
             id: ctrlId,
             type: 'escalationControlNode',
-            position: layout[ctrlId] || { x: 300 + idx * 240 + cIdx * 160, y: 435 },
+            position: layoutPositions[ctrlId] || { x: 300 + idx * 240 + cIdx * 160, y: 435 },
             data: {
               label: ctrl.descripcion,
               tag: ctrl.tag_activo,
@@ -625,7 +630,11 @@ export const BowTieView: React.FC = () => {
     })
 
     setNodes(nodeList)
-    setEdges(edgeList)
+    if (savedEdges && Array.isArray(savedEdges) && savedEdges.length > 0) {
+      setEdges(savedEdges)
+    } else {
+      setEdges(edgeList)
+    }
   }, [bt, esAdmin, setNodes, setEdges])
 
   // ==========================================
@@ -685,15 +694,228 @@ export const BowTieView: React.FC = () => {
   )
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      const edgeToAdd: Edge = {
+        ...params,
+        id: `e-${params.source}-${params.target}-${Date.now()}`,
+        animated: false,
+        style: { stroke: '#10b981', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      }
+      setEdges((eds) => addEdge(edgeToAdd, eds))
+    },
     [setEdges]
   )
+
+  // Eliminar conexión haciendo doble clic sobre ella
+  const handleEdgeDoubleClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      if (!esAdmin) return
+      const confirmar = window.confirm(
+        `¿Desea eliminar esta conexión?\n\nConexión: ${edge.source} ➔ ${edge.target}`
+      )
+      if (confirmar) {
+        setEdges((eds) => eds.filter((e) => e.id !== edge.id))
+      }
+    },
+    [esAdmin, setEdges]
+  )
+
+  // Abrir modal de confirmación de eliminación de bloque al hacer doble clic
+  const handleNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      if (!esAdmin) return
+      setBloqueSeleccionado(null)
+      setNodoAEliminar(node)
+    },
+    [esAdmin]
+  )
+
+  // Ejecutar eliminación confirmada de un bloque
+  const handleEliminarNodo = (nodeId: string) => {
+    // 1. Quitar de nodes y edges en el canvas
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId))
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+
+    // 2. Quitar del objeto de datos en memoria (bt)
+    if (bt) {
+      if (nodeId.startsWith('prev-')) {
+        const tag = nodeId.replace('prev-', '')
+        bt.preventivas = bt.preventivas.filter((b) => b.tag_activo !== tag)
+      } else if (nodeId.startsWith('mit-')) {
+        const tag = nodeId.replace('mit-', '')
+        bt.mitigativas = bt.mitigativas.filter((b) => b.tag_activo !== tag)
+      } else if (nodeId.startsWith('fe-')) {
+        bt.factores_escalamiento = (bt.factores_escalamiento || []).filter(
+          (fe, idx) => `fe-${fe.id || idx}` !== nodeId
+        )
+      } else if (nodeId.startsWith('ctrl-')) {
+        bt.factores_escalamiento?.forEach((fe) => {
+          fe.controles = (fe.controles || []).filter(
+            (c, cIdx) => `ctrl-${c.id || cIdx}` !== nodeId
+          )
+        })
+      }
+    }
+
+    setNodoAEliminar(null)
+    setBloqueSeleccionado(null)
+  }
+
+  // Validación rigurosa de conexiones según la metodología BowTie antes de guardar
+  const validarConexionesBowTie = (
+    currentNodes: Node[],
+    currentEdges: Edge[]
+  ): { valido: boolean; error?: string } => {
+    // 1. Verificar que ningún bloque esté huérfano (completamente desconectado)
+    for (const n of currentNodes) {
+      const tieneConexion = currentEdges.some(
+        (e) => e.source === n.id || e.target === n.id
+      )
+      if (!tieneConexion) {
+        const nombre = n.data?.tag || n.data?.label || n.id
+        return {
+          valido: false,
+          error: `El bloque "${nombre}" está completamente desconectado sin ninguna conexión.\nTodos los bloques deben estar conectados según la metodología BowTie antes de guardar.`,
+        }
+      }
+    }
+
+    // 2. Peligro -> Evento Tope
+    const connPeligro = currentEdges.filter(
+      (e) => e.source === 'hazard' && e.target === 'topEvent'
+    )
+    if (connPeligro.length === 0) {
+      return {
+        valido: false,
+        error: 'El bloque de Peligro (Hazard) debe estar conectado directamente al Evento Tope (Top Event).',
+      }
+    }
+
+    // 3. Amenaza (Causa) debe tener al menos una salida
+    const amenazaOut = currentEdges.filter((e) => e.source === 'threat')
+    if (amenazaOut.length === 0) {
+      return {
+        valido: false,
+        error: 'El bloque de Amenaza (Causa) debe tener una conexión de salida hacia las barreras preventivas o hacia el Evento Tope.',
+      }
+    }
+
+    // 4. Barreras Preventivas: deben tener al menos 1 entrada y 1 salida
+    const prevNodes = currentNodes.filter((n) => n.id.startsWith('prev-'))
+    for (const p of prevNodes) {
+      const tieneEntrada = currentEdges.some((e) => e.target === p.id)
+      const tieneSalida = currentEdges.some((e) => e.source === p.id)
+      const tag = p.data?.tag || p.id
+      if (!tieneEntrada) {
+        return {
+          valido: false,
+          error: `La Barrera Preventiva "${tag}" no tiene conexión de entrada (debe conectarse desde la Amenaza o una barrera previa).`,
+        }
+      }
+      if (!tieneSalida) {
+        return {
+          valido: false,
+          error: `La Barrera Preventiva "${tag}" no tiene conexión de salida (debe conectarse hacia otra barrera o hacia el Evento Tope).`,
+        }
+      }
+    }
+
+    // 5. Evento Tope: debe recibir del lado preventivo y salir hacia el lado reactivo
+    const topIn = currentEdges.filter(
+      (e) => e.target === 'topEvent' && e.source !== 'hazard'
+    )
+    if (topIn.length === 0) {
+      return {
+        valido: false,
+        error: 'El Evento Tope no tiene conexión de entrada proveniente de la línea preventiva (Amenaza o Barreras Preventivas).',
+      }
+    }
+    const topOut = currentEdges.filter((e) => e.source === 'topEvent')
+    if (topOut.length === 0) {
+      return {
+        valido: false,
+        error: 'El Evento Tope no tiene conexión de salida hacia la línea reactiva (Barreras Reactivas o Consecuencia).',
+      }
+    }
+
+    // 6. Barreras Reactivas: deben tener al menos 1 entrada y 1 salida
+    const mitNodes = currentNodes.filter((n) => n.id.startsWith('mit-'))
+    for (const m of mitNodes) {
+      const tieneEntrada = currentEdges.some((e) => e.target === m.id)
+      const tieneSalida = currentEdges.some((e) => e.source === m.id)
+      const tag = m.data?.tag || m.id
+      if (!tieneEntrada) {
+        return {
+          valido: false,
+          error: `La Barrera Reactiva "${tag}" no tiene conexión de entrada (debe conectarse desde el Evento Tope o una barrera previa).`,
+        }
+      }
+      if (!tieneSalida) {
+        return {
+          valido: false,
+          error: `La Barrera Reactiva "${tag}" no tiene conexión de salida (debe conectarse hacia otra barrera o hacia la Consecuencia).`,
+        }
+      }
+    }
+
+    // 7. Consecuencia: debe tener conexión de entrada
+    const consIn = currentEdges.filter((e) => e.target === 'consequence')
+    if (consIn.length === 0) {
+      return {
+        valido: false,
+        error: 'El bloque de Consecuencia no tiene conexión de entrada proveniente del Evento Tope o de una barrera reactiva.',
+      }
+    }
+
+    // 8. Factores de Escalamiento: deben tener conexión de salida
+    const feNodes = currentNodes.filter((n) => n.id.startsWith('fe-'))
+    for (const fe of feNodes) {
+      const feOut = currentEdges.filter((e) => e.source === fe.id)
+      if (feOut.length === 0) {
+        const label = fe.data?.label || fe.id
+        return {
+          valido: false,
+          error: `El Factor de Escalamiento "${label}" debe conectarse a un Control de Factor o directamente a la barrera afectada.`,
+        }
+      }
+    }
+
+    // 9. Controles de Factor: deben tener entrada y salida
+    const ctrlNodes = currentNodes.filter((n) => n.id.startsWith('ctrl-'))
+    for (const ctrl of ctrlNodes) {
+      const tieneEntrada = currentEdges.some((e) => e.target === ctrl.id)
+      const tieneSalida = currentEdges.some((e) => e.source === ctrl.id)
+      const label = ctrl.data?.label || ctrl.id
+      if (!tieneEntrada) {
+        return {
+          valido: false,
+          error: `El Control de Factor "${label}" no tiene conexión de entrada proveniente de un factor de escalamiento.`,
+        }
+      }
+      if (!tieneSalida) {
+        return {
+          valido: false,
+          error: `El Control de Factor "${label}" no tiene conexión de salida hacia la barrera o hacia otro control.`,
+        }
+      }
+    }
+
+    return { valido: true }
+  }
 
   // Guardar estado actual del layout y los bloques en la base de datos
   const handleGuardarBowTie = () => {
     if (!bt) return
 
-    // Capturar posiciones actuales de los nodos
+    // 1. Verificar conexiones de todos los bloques
+    const validacion = validarConexionesBowTie(nodes, edges)
+    if (!validacion.valido) {
+      alert(`⚠️ No se puede guardar el BowTie:\n\n${validacion.error}`)
+      return
+    }
+
+    // 2. Capturar posiciones actuales de los nodos
     const layoutMap: Record<string, { x: number; y: number }> = {}
     nodes.forEach((n) => {
       layoutMap[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
@@ -710,36 +932,56 @@ export const BowTieView: React.FC = () => {
       imp_ambiente: bt.imp_ambiente,
       imp_reputacion: bt.imp_reputacion,
       barreras: [
-        ...bt.preventivas.map((p) => ({
-          tag_activo: p.tag_activo,
-          descripcion: p.descripcion,
-          tipo: p.tipo,
-          lado: 'PREVENTIVA',
-          frr_diseno: p.frr_diseno,
-          estado_actual: p.estado_actual,
-        })),
-        ...bt.mitigativas.map((m) => ({
-          tag_activo: m.tag_activo,
-          descripcion: m.descripcion,
-          tipo: m.tipo,
-          lado: 'MITIGATIVA',
-          frr_diseno: m.frr_diseno,
-          estado_actual: m.estado_actual,
-        })),
+        ...bt.preventivas
+          .filter((p) => nodes.some((n) => n.id === `prev-${p.tag_activo}`))
+          .map((p) => ({
+            tag_activo: p.tag_activo,
+            descripcion: p.descripcion,
+            tipo: p.tipo,
+            lado: 'PREVENTIVA',
+            frr_diseno: p.frr_diseno,
+            estado_actual: p.estado_actual,
+          })),
+        ...bt.mitigativas
+          .filter((m) => nodes.some((n) => n.id === `mit-${m.tag_activo}`))
+          .map((m) => ({
+            tag_activo: m.tag_activo,
+            descripcion: m.descripcion,
+            tipo: m.tipo,
+            lado: 'MITIGATIVA',
+            frr_diseno: m.frr_diseno,
+            estado_actual: m.estado_actual,
+          })),
       ],
-      factores_escalamiento: (bt.factores_escalamiento || []).map((fe) => ({
-        id: fe.id,
-        barrera_tag: fe.barrera_tag,
-        descripcion: fe.descripcion,
-        categoria: fe.categoria,
-        controles: (fe.controles || []).map((c) => ({
-          id: c.id,
-          descripcion: c.descripcion,
-          tag_activo: c.tag_activo,
-          estado_actual: c.estado_actual,
+      factores_escalamiento: (bt.factores_escalamiento || [])
+        .filter((fe, idx) => nodes.some((n) => n.id === `fe-${fe.id || idx}`))
+        .map((fe, idx) => ({
+          id: fe.id,
+          barrera_tag: fe.barrera_tag,
+          descripcion: fe.descripcion,
+          categoria: fe.categoria,
+          controles: (fe.controles || [])
+            .filter((c, cIdx) => nodes.some((n) => n.id === `ctrl-${c.id || `${idx}-${cIdx}`}`))
+            .map((c) => ({
+              id: c.id,
+              descripcion: c.descripcion,
+              tag_activo: c.tag_activo,
+              estado_actual: c.estado_actual,
+            })),
         })),
-      })),
-      layout: layoutMap,
+      layout: {
+        positions: layoutMap,
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle || undefined,
+          targetHandle: e.targetHandle || undefined,
+          style: e.style || undefined,
+          animated: e.animated || false,
+          markerEnd: e.markerEnd || undefined,
+        })),
+      },
     }
 
     mutacionGuardar.mutate(payload)
@@ -885,6 +1127,11 @@ export const BowTieView: React.FC = () => {
           onNodesChange={esAdmin ? onNodesChange : undefined}
           onEdgesChange={esAdmin ? onEdgesChange : undefined}
           onConnect={esAdmin ? onConnect : undefined}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          onEdgeDoubleClick={handleEdgeDoubleClick}
+          edgesFocusable={esAdmin}
+          edgesReconnectable={esAdmin}
+          deleteKeyCode={esAdmin ? ['Backspace', 'Delete'] : []}
           isValidConnection={isValidConnection}
           nodesDraggable={esAdmin}
           nodesConnectable={esAdmin}
@@ -897,14 +1144,14 @@ export const BowTieView: React.FC = () => {
           <Controls />
         </ReactFlow>
 
-        {/* Barra Informativa de Roles */}
+        {/* Barra Informativa de Roles y Atajos */}
         <div className="absolute top-3 left-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur border border-slate-200 dark:border-slate-800 px-3 py-1.5 rounded-lg text-xs shadow-sm flex items-center gap-2">
           <span
             className={`w-2 h-2 rounded-full ${esAdmin ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}
           />
           <span className="text-slate-600 dark:text-slate-300">
             {esAdmin
-              ? 'Modo Edición Habilitado (Haz clic en un bloque para editar sus atributos o arrastra para conectar)'
+              ? 'Modo Editor: Clic para editar • Doble clic en bloque o conexión para eliminar • Arrastra para conectar'
               : 'Modo Solo Lectura (Inicia sesión como administrador para editar este BowTie)'}
           </span>
         </div>
@@ -1497,106 +1744,306 @@ export const BowTieView: React.FC = () => {
             </div>
 
             {/* Botones de acción del Modal */}
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setBloqueSeleccionado(null)}
-                className="btn-secondary text-xs"
-              >
-                Cerrar
-              </button>
-              <button
-                onClick={() => {
-                  // Aplicar cambios en memoria y guardar en el backend
-                  const s = bloqueSeleccionado
-                  if (s.tipo === 'hazard') bt.peligro = s.valor
-                  if (s.tipo === 'topEvent') bt.evento_tope = s.valor
-                  if (s.tipo === 'threat') {
-                    bt.causa = s.causa
-                    bt.frecuencia_diseno = s.frecuencia
-                  }
-                  if (s.tipo === 'consequence') {
-                    bt.consecuencia = s.consecuencia
-                    bt.imp_personas = s.impPersonas
-                    bt.imp_ambiente = s.impAmbiente
-                    bt.imp_economico = s.impEconomico
-                    bt.imp_reputacion = s.impReputacion
-                  }
-                  if (s.tipo === 'barrier') {
-                    const list =
-                      s.lado === 'PREVENTIVA' ? bt.preventivas : bt.mitigativas
-                    const target = list.find(
-                      (x) => x.tag_activo === s.barrera.tag_activo
-                    )
-                    if (target) {
-                      target.descripcion = s.barrera.descripcion
-                      target.frr_diseno = s.barrera.frr_diseno
-                      target.estado_actual = s.barrera.estado_actual
+            <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+              {['barrier', 'escalationFactor', 'escalationControl'].includes(bloqueSeleccionado.tipo) && esAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    let nodeId = ''
+                    if (bloqueSeleccionado.tipo === 'barrier') {
+                      nodeId = `${bloqueSeleccionado.lado === 'PREVENTIVA' ? 'prev' : 'mit'}-${bloqueSeleccionado.barrera.tag_activo}`
+                    } else if (bloqueSeleccionado.tipo === 'escalationFactor') {
+                      nodeId = `fe-${bloqueSeleccionado.factor.id}`
+                    } else if (bloqueSeleccionado.tipo === 'escalationControl') {
+                      nodeId = `ctrl-${bloqueSeleccionado.control.id}`
                     }
-                  }
-                  if (s.tipo === 'nuevaBarrera') {
-                    const nueva: BarreraEscenario = {
-                      barrera_id: 0,
-                      tag_activo: s.tag_activo,
-                      descripcion: s.descripcion,
-                      tipo: 'EXISTENTE',
-                      lado: s.lado,
-                      frr_diseno: s.frr_diseno,
-                      frr_efectivo: s.frr_diseno,
-                      estado_actual: 'DISPONIBLE',
-                      cuenta_en_diseno: true,
-                      vigente: true,
-                      vigencia_desde: null,
-                      vigencia_hasta: null,
-                      moc_ref: null,
+                    if (nodeId) handleEliminarNodo(nodeId)
+                  }}
+                  className="btn-secondary text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  🗑️ Eliminar Bloque
+                </button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBloqueSeleccionado(null)}
+                  className="btn-secondary text-xs"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => {
+                    // Aplicar cambios en memoria
+                    const s = bloqueSeleccionado
+                    if (s.tipo === 'hazard') bt.peligro = s.valor
+                    if (s.tipo === 'topEvent') bt.evento_tope = s.valor
+                    if (s.tipo === 'threat') {
+                      bt.causa = s.causa
+                      bt.frecuencia_diseno = s.frecuencia
                     }
-                    if (s.lado === 'PREVENTIVA') {
-                      bt.preventivas.push(nueva)
-                    } else {
-                      bt.mitigativas.push(nueva)
+                    if (s.tipo === 'consequence') {
+                      bt.consecuencia = s.consecuencia
+                      bt.imp_personas = s.impPersonas
+                      bt.imp_ambiente = s.impAmbiente
+                      bt.imp_economico = s.impEconomico
+                      bt.imp_reputacion = s.impReputacion
                     }
-                  }
-                  if (s.tipo === 'nuevoFactor') {
-                    const controles = s.controlesDesc
-                      ? [
-                          {
-                            descripcion: s.controlesDesc,
-                            tag_activo: `CTRL-${s.barrera_tag}`,
-                            estado_actual: 'DISPONIBLE' as const,
-                          },
-                        ]
-                      : []
-                    const nuevo = {
-                      barrera_tag: s.barrera_tag,
-                      descripcion: s.descripcion,
-                      categoria: s.categoria,
-                      controles,
-                    }
-                    if (!bt.factores_escalamiento) bt.factores_escalamiento = []
-                    bt.factores_escalamiento.push(nuevo)
-                  }
-                  if (s.tipo === 'escalationFactor') {
-                    const fe = bt.factores_escalamiento?.find(
-                      (x) => x.id === s.factor.id
-                    )
-                    if (fe) fe.descripcion = s.factor.descripcion
-                  }
-                  if (s.tipo === 'escalationControl') {
-                    bt.factores_escalamiento?.forEach((fe) => {
-                      const c = fe.controles?.find((x) => x.id === s.control.id)
-                      if (c) {
-                        c.descripcion = s.control.descripcion
-                        c.tag_activo = s.control.tag_activo
+                    if (s.tipo === 'barrier') {
+                      const list =
+                        s.lado === 'PREVENTIVA' ? bt.preventivas : bt.mitigativas
+                      const target = list.find(
+                        (x) => x.tag_activo === s.barrera.tag_activo
+                      )
+                      if (target) {
+                        target.descripcion = s.barrera.descripcion
+                        target.frr_diseno = s.barrera.frr_diseno
+                        target.estado_actual = s.barrera.estado_actual
                       }
-                    })
-                  }
-                  handleGuardarBowTie()
-                  setBloqueSeleccionado(null)
-                }}
-                className="btn-primary text-xs"
-              >
-                Aplicar y Guardar
-              </button>
+                    }
+                    if (s.tipo === 'nuevaBarrera') {
+                      const nueva: BarreraEscenario = {
+                        barrera_id: 0,
+                        tag_activo: s.tag_activo,
+                        descripcion: s.descripcion,
+                        tipo: 'EXISTENTE',
+                        lado: s.lado,
+                        frr_diseno: s.frr_diseno,
+                        frr_efectivo: s.frr_diseno,
+                        estado_actual: 'DISPONIBLE',
+                        cuenta_en_diseno: true,
+                        vigente: true,
+                        vigencia_desde: null,
+                        vigencia_hasta: null,
+                        moc_ref: null,
+                      }
+                      if (s.lado === 'PREVENTIVA') {
+                        bt.preventivas.push(nueva)
+                      } else {
+                        bt.mitigativas.push(nueva)
+                      }
+
+                      // Agregar nodo a la vista SIN CONEXIONES
+                      const bId = `${s.lado === 'PREVENTIVA' ? 'prev' : 'mit'}-${s.tag_activo}`
+                      const posNueva = {
+                        x: s.lado === 'PREVENTIVA' ? 260 + bt.preventivas.length * 50 : 860 + bt.mitigativas.length * 50,
+                        y: 360,
+                      }
+                      const nuevoNodo: Node = {
+                        id: bId,
+                        type: s.lado === 'PREVENTIVA' ? 'preventiveBarrierNode' : 'recoveryBarrierNode',
+                        position: posNueva,
+                        data: {
+                          tag: s.tag_activo,
+                          desc: s.descripcion,
+                          estado: 'DISPONIBLE',
+                          frrDiseno: s.frr_diseno,
+                          frrEfectivo: s.frr_diseno,
+                          onEdit: () =>
+                            esAdmin &&
+                            setBloqueSeleccionado({
+                              tipo: 'barrier',
+                              lado: s.lado,
+                              barrera: nueva,
+                            }),
+                        },
+                      }
+                      setNodes((nds) => [...nds, nuevoNodo])
+                      setBloqueSeleccionado(null)
+                      alert(`✓ Barrera ${s.lado.toLowerCase()} "${s.tag_activo}" agregada sin conexiones.\n\nConéctala arrastrando una línea desde la Amenaza o barrera anterior, y hacia el Evento Tope o siguiente barrera, luego haz clic en "Guardar BowTie".`)
+                      return
+                    }
+                    if (s.tipo === 'nuevoFactor') {
+                      const controles = s.controlesDesc
+                        ? [
+                            {
+                              descripcion: s.controlesDesc,
+                              tag_activo: `CTRL-${s.barrera_tag}`,
+                              estado_actual: 'DISPONIBLE' as const,
+                            },
+                          ]
+                        : []
+                      const nuevo = {
+                        barrera_tag: s.barrera_tag,
+                        descripcion: s.descripcion,
+                        categoria: s.categoria,
+                        controles,
+                      }
+                      if (!bt.factores_escalamiento) bt.factores_escalamiento = []
+                      bt.factores_escalamiento.push(nuevo)
+
+                      // Agregar nodo a la vista SIN CONEXIONES
+                      const feId = `fe-${Date.now()}`
+                      const nuevosNodos: Node[] = [
+                        {
+                          id: feId,
+                          type: 'escalationFactorNode',
+                          position: { x: 260, y: 460 },
+                          data: {
+                            label: s.descripcion,
+                            categoria: s.categoria,
+                            onEdit: () =>
+                              esAdmin &&
+                              setBloqueSeleccionado({
+                                tipo: 'escalationFactor',
+                                factor: nuevo,
+                              }),
+                          },
+                        },
+                      ]
+                      if (controles.length > 0) {
+                        const ctrlId = `ctrl-${Date.now()}`
+                        nuevosNodos.push({
+                          id: ctrlId,
+                          type: 'escalationControlNode',
+                          position: { x: 460, y: 460 },
+                          data: {
+                            label: controles[0].descripcion,
+                            tag: controles[0].tag_activo,
+                            estado: 'DISPONIBLE',
+                            onEdit: () =>
+                              esAdmin &&
+                              setBloqueSeleccionado({
+                                tipo: 'escalationControl',
+                                control: controles[0],
+                              }),
+                          },
+                        })
+                      }
+                      setNodes((nds) => [...nds, ...nuevosNodos])
+                      setBloqueSeleccionado(null)
+                      alert(`✓ Factor de escalamiento agregado sin conexiones.\n\nConéctalo a su control o barrera y luego haz clic en "Guardar BowTie".`)
+                      return
+                    }
+                    if (s.tipo === 'escalationFactor') {
+                      const fe = bt.factores_escalamiento?.find(
+                        (x) => x.id === s.factor.id
+                      )
+                      if (fe) fe.descripcion = s.factor.descripcion
+                    }
+                    if (s.tipo === 'escalationControl') {
+                      bt.factores_escalamiento?.forEach((fe) => {
+                        const c = fe.controles?.find((x) => x.id === s.control.id)
+                        if (c) {
+                          c.descripcion = s.control.descripcion
+                          c.tag_activo = s.control.tag_activo
+                        }
+                      })
+                    }
+
+                    // Actualizar atributos en los nodos de la vista
+                    setNodes((nds) =>
+                      nds.map((n) => {
+                        if (n.id === 'hazard' && s.tipo === 'hazard') {
+                          return { ...n, data: { ...n.data, label: s.valor } }
+                        }
+                        if (n.id === 'topEvent' && s.tipo === 'topEvent') {
+                          return { ...n, data: { ...n.data, label: s.valor } }
+                        }
+                        if (n.id === 'threat' && s.tipo === 'threat') {
+                          return { ...n, data: { ...n.data, label: s.causa, frecuencia: s.frecuencia } }
+                        }
+                        if (n.id === 'consequence' && s.tipo === 'consequence') {
+                          return {
+                            ...n,
+                            data: {
+                              ...n.data,
+                              label: s.consecuencia,
+                              impPersonas: s.impPersonas,
+                              impAmbiente: s.impAmbiente,
+                              impEconomico: s.impEconomico,
+                              impReputacion: s.impReputacion,
+                            },
+                          }
+                        }
+                        if (s.tipo === 'barrier' && (n.id === `prev-${s.barrera?.tag_activo}` || n.id === `mit-${s.barrera?.tag_activo}`)) {
+                          return {
+                            ...n,
+                            data: {
+                              ...n.data,
+                              desc: s.barrera.descripcion,
+                              frrDiseno: s.barrera.frr_diseno,
+                              estado: s.barrera.estado_actual,
+                            },
+                          }
+                        }
+                        return n
+                      })
+                    )
+                    setBloqueSeleccionado(null)
+                  }}
+                  className="btn-primary text-xs"
+                >
+                  Aplicar Cambios
+                </button>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación de eliminación de bloque al hacer doble clic */}
+      {nodoAEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-red-200 dark:border-red-900 max-w-sm w-full p-5 space-y-4">
+            <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-sm">
+              <span className="text-xl">⚠️</span>
+              <h3 className="uppercase tracking-wider">Eliminar Bloque BowTie</h3>
+            </div>
+
+            {['hazard', 'topEvent', 'threat', 'consequence'].includes(nodoAEliminar.id) ? (
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <p>
+                  El bloque principal <strong>"{String(nodoAEliminar.data?.label || nodoAEliminar.id)}"</strong> es parte del núcleo de la metodología BowTie (Peligro, Evento Tope, Amenaza y Consecuencia) y no puede eliminarse.
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Puedes modificar su texto o atributos haciendo un solo clic sobre el bloque.
+                </p>
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => setNodoAEliminar(null)}
+                    className="btn-secondary text-xs"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                <p>
+                  ¿Deseas eliminar este bloque del diagrama?
+                </p>
+                <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                  <span className="font-bold text-slate-800 dark:text-slate-100">
+                    {String(nodoAEliminar.data?.tag || nodoAEliminar.data?.label || nodoAEliminar.id)}
+                  </span>
+                  {Boolean(nodoAEliminar.data?.desc) && (
+                    <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">
+                      {String(nodoAEliminar.data?.desc)}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  ⚡ Se eliminarán también todas las conexiones asociadas a este bloque.
+                </p>
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => setNodoAEliminar(null)}
+                    className="btn-secondary text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleEliminarNodo(nodoAEliminar.id)}
+                    className="btn-primary bg-red-600 hover:bg-red-700 text-xs px-3 font-semibold"
+                  >
+                    🗑️ Sí, Eliminar Bloque
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
