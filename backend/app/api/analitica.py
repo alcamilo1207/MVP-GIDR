@@ -11,16 +11,30 @@ from app.api.escenarios import _detalle_barreras, _fila
 from app.config import get_settings
 from app.domain.engine import constants as c
 from app.errors import no_encontrado
-from app.models import Accion, Barrera, EscenarioBarrera, EstadoBarreraHist
+from app.models import (
+    Accion,
+    Barrera,
+    ControlFactorEscalamiento,
+    Escenario,
+    EscenarioBarrera,
+    EstadoBarreraHist,
+    FactorEscalamiento,
+)
 from app.schemas import (
     BarreraEscenarioOut,
+    BowTieCompletoOut,
+    BowTieGuardarIn,
     CeldaMapa,
+    ConsecuenciaBowTie,
+    ControlFactorOut,
     EscenarioPriorizado,
+    FactorEscalamientoOut,
     ResultadoOut,
     ResumenDashboard,
 )
-from app.security import DbSession, Usuario_
+from app.security import Admin, DbSession, Usuario_
 from app.services import recalc
+from app.services.audit import registrar
 from app.services.queries import a_escenario_out, consulta_escenarios
 
 router = APIRouter(tags=["Analítica"])
@@ -177,43 +191,257 @@ def api754(db: DbSession, _: Usuario_) -> IndicadoresApi754:
             dias_alerta_vencimiento=dias))
 
 
-# ---------------------------------------------------------------- BowTie
-class ConsecuenciaBowTie(BaseModel):
-    categoria: str
-    nivel: int
-    texto: str
+# ---------------------------------------------------------------- BowTie (Metodología 8 Bloques)
+def _obtener_factores_escalamiento(db: DbSession, escenario_id: int) -> list[FactorEscalamientoOut]:
+    factores = db.scalars(
+        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
+    ).all()
+    resultado = []
+    for f in factores:
+        eb = db.get(EscenarioBarrera, f.escenario_barrera_id)
+        tag = eb.barrera.tag_activo if eb and eb.barrera else "BARRERA"
+        controles_out = [
+            ControlFactorOut(
+                id=c.id,
+                factor_escalamiento_id=c.factor_escalamiento_id,
+                descripcion=c.descripcion,
+                tag_activo=c.tag_activo,
+                estado_actual=c.estado_actual,
+            )
+            for c in f.controles
+        ]
+        resultado.append(
+            FactorEscalamientoOut(
+                id=f.id,
+                escenario_id=f.escenario_id,
+                escenario_barrera_id=f.escenario_barrera_id,
+                barrera_tag=tag,
+                descripcion=f.descripcion,
+                categoria=f.categoria,
+                controles=controles_out,
+            )
+        )
+    return resultado
 
 
-class BowTieOut(BaseModel):
-    escenario_id: int
-    causa: str
-    evento_tope: str
-    consecuencia: str
-    ruta: str
-    preventivas: list[BarreraEscenarioOut]
-    mitigativas: list[BarreraEscenarioOut]
-    consecuencias: list[ConsecuenciaBowTie]
-    resultado: ResultadoOut | None
-
-
-@router.get("/bowtie/{escenario_id}", response_model=BowTieOut)
-def bowtie(escenario_id: int, db: DbSession, _: Usuario_) -> BowTieOut:
+@router.get("/bowtie/{escenario_id}", response_model=BowTieCompletoOut)
+def bowtie(escenario_id: int, db: DbSession, _: Usuario_) -> BowTieCompletoOut:
     fila = _fila(db, escenario_id)
     if fila is None:  # pragma: no cover
         raise no_encontrado("Escenario", escenario_id)
+    esc_modelo: Escenario = fila[0]
     esc = a_escenario_out(fila)
     barreras = _detalle_barreras(db, escenario_id)
-    cats = [("Personas", esc.imp_personas), ("Ambiente", esc.imp_ambiente),
-            ("Económico", esc.imp_economico), ("Reputación", esc.imp_reputacion)]
-    cons = [ConsecuenciaBowTie(categoria=n, nivel=v, texto=esc.consecuencia)
-            for n, v in sorted(cats, key=lambda x: -x[1]) if v >= 3] or [
-        ConsecuenciaBowTie(categoria="General", nivel=max(v for _, v in cats), texto=esc.consecuencia)]
-    return BowTieOut(
-        escenario_id=escenario_id, causa=esc.causa,
-        evento_tope=f"{esc.palabra_guia} en {esc.nodo}",
+    cats = [
+        ("Personas", esc.imp_personas),
+        ("Ambiente", esc.imp_ambiente),
+        ("Económico", esc.imp_economico),
+        ("Reputación", esc.imp_reputacion),
+    ]
+    cons = [
+        ConsecuenciaBowTie(categoria=n, nivel=v, texto=esc.consecuencia)
+        for n, v in sorted(cats, key=lambda x: -x[1])
+        if v >= 3
+    ] or [ConsecuenciaBowTie(categoria="General", nivel=max(v for _, v in cats), texto=esc.consecuencia)]
+
+    peligro = esc_modelo.peligro or f"Peligro inherente en {esc.nodo}: Presencia de fluidos y energía de proceso"
+    evento_tope = esc_modelo.evento_tope or f"{esc.palabra_guia} en {esc.nodo} (Pérdida de contención)"
+    factores = _obtener_factores_escalamiento(db, escenario_id)
+
+    return BowTieCompletoOut(
+        escenario_id=escenario_id,
+        peligro=peligro,
+        evento_tope=evento_tope,
+        causa=esc.causa,
+        frecuencia_diseno=esc.frecuencia_diseno,
         consecuencia=esc.consecuencia,
         ruta=f"{esc.site} / {esc.unidad} / {esc.nodo} / {esc.palabra_guia}",
+        imp_economico=esc.imp_economico,
+        imp_personas=esc.imp_personas,
+        imp_ambiente=esc.imp_ambiente,
+        imp_reputacion=esc.imp_reputacion,
         preventivas=[b for b in barreras if b.lado == "PREVENTIVA"],
         mitigativas=[b for b in barreras if b.lado == "MITIGATIVA"],
-        consecuencias=cons, resultado=esc.resultado)
+        consecuencias=cons,
+        factores_escalamiento=factores,
+        resultado=esc.resultado,
+        layout=esc_modelo.bowtie_layout,
+    )
+
+
+@router.put("/bowtie/{escenario_id}", response_model=BowTieCompletoOut)
+def guardar_bowtie(
+    escenario_id: int, datos: BowTieGuardarIn, db: DbSession, p: Admin
+) -> BowTieCompletoOut:
+    """Actualiza interactivamente los bloques del BowTie:
+
+    Causa, Peligro, Evento Tope, Consecuencia, Impactos, Barreras (FRR, Lado, Estado),
+    Factores de Escalamiento y Controles.
+    """
+    esc: Escenario | None = db.get(Escenario, escenario_id)
+    if esc is None:
+        raise no_encontrado("Escenario", escenario_id)
+
+    antes = {
+        "causa": esc.causa,
+        "peligro": esc.peligro,
+        "evento_tope": esc.evento_tope,
+        "frecuencia_diseno": esc.frecuencia_diseno,
+        "consecuencia": esc.consecuencia,
+        "imp_economico": esc.imp_economico,
+        "imp_personas": esc.imp_personas,
+        "imp_ambiente": esc.imp_ambiente,
+        "imp_reputacion": esc.imp_reputacion,
+    }
+
+    # 1. Actualizar atributos de escenario (Amenaza, Peligro, Evento Tope, Consecuencia)
+    esc.causa = datos.causa
+    esc.peligro = datos.peligro
+    esc.evento_tope = datos.evento_tope
+    esc.frecuencia_diseno = datos.frecuencia_diseno
+    esc.consecuencia = datos.consecuencia
+    esc.imp_economico = datos.imp_economico
+    esc.imp_personas = datos.imp_personas
+    esc.imp_ambiente = datos.imp_ambiente
+    esc.imp_reputacion = datos.imp_reputacion
+    if datos.layout is not None:
+        esc.bowtie_layout = datos.layout
+    esc.version += 1
+
+    # 2. Sincronizar barreras
+    empresa_id = recalc.empresa_de(esc)
+    existentes_eb = {
+        eb.barrera.tag_activo: eb
+        for eb in db.scalars(
+            select(EscenarioBarrera)
+            .where(EscenarioBarrera.escenario_id == escenario_id)
+        ).all()
+    }
+    tags_enviados = set()
+    mapa_tag_a_eb_id: dict[str, int] = {}
+
+    for b_in in datos.barreras:
+        tags_enviados.add(b_in.tag_activo)
+        # Buscar o crear entidad Barrera en la empresa
+        barrera = db.scalars(
+            select(Barrera).where(
+                Barrera.empresa_id == empresa_id,
+                Barrera.tag_activo == b_in.tag_activo,
+            )
+        ).first()
+
+        if barrera is None:
+            barrera = Barrera(
+                empresa_id=empresa_id,
+                tag_activo=b_in.tag_activo,
+                descripcion=b_in.descripcion,
+                tipo=b_in.tipo,
+                estado_actual=b_in.estado_actual,
+                estado_actualizado=recalc.ahora(),
+            )
+            db.add(barrera)
+            db.flush()
+            db.add(
+                EstadoBarreraHist(
+                    barrera_id=barrera.id,
+                    ts=recalc.ahora(),
+                    estado=b_in.estado_actual,
+                    fuente="BOWTIE_EDITOR",
+                    detalle={"nota": "Creada desde editor BowTie"},
+                )
+            )
+        else:
+            barrera.descripcion = b_in.descripcion
+            barrera.tipo = b_in.tipo
+            if barrera.estado_actual != b_in.estado_actual:
+                ant_est = barrera.estado_actual
+                barrera.estado_actual = b_in.estado_actual
+                barrera.estado_actualizado = recalc.ahora()
+                db.add(
+                    EstadoBarreraHist(
+                        barrera_id=barrera.id,
+                        ts=recalc.ahora(),
+                        estado=b_in.estado_actual,
+                        fuente="BOWTIE_EDITOR",
+                        detalle={"antes": ant_est},
+                    )
+                )
+
+        # Vincular en EscenarioBarrera
+        eb = existentes_eb.get(b_in.tag_activo)
+        if eb is None:
+            eb = EscenarioBarrera(
+                escenario_id=escenario_id,
+                barrera_id=barrera.id,
+                frr_diseno=b_in.frr_diseno,
+                lado=b_in.lado,
+            )
+            db.add(eb)
+            db.flush()
+        else:
+            eb.frr_diseno = b_in.frr_diseno
+            eb.lado = b_in.lado
+            db.flush()
+        mapa_tag_a_eb_id[b_in.tag_activo] = eb.id
+
+    # Eliminar barreras que se removieron del diagrama
+    for tag_ant, eb_ant in existentes_eb.items():
+        if tag_ant not in tags_enviados:
+            db.delete(eb_ant)
+    db.flush()
+
+    # 3. Sincronizar Factores de Escalamiento y Controles
+    # Limpiamos factores previos de este escenario y recreamos los enviados
+    db.execute(
+        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
+    )
+    factores_antiguos = db.scalars(
+        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
+    ).all()
+    for fa in factores_antiguos:
+        db.delete(fa)
+    db.flush()
+
+    for fe_in in datos.factores_escalamiento:
+        eb_id = mapa_tag_a_eb_id.get(fe_in.barrera_tag)
+        if not eb_id:
+            continue
+        fe = FactorEscalamiento(
+            escenario_id=escenario_id,
+            escenario_barrera_id=eb_id,
+            descripcion=fe_in.descripcion,
+            categoria=fe_in.categoria,
+        )
+        db.add(fe)
+        db.flush()
+        for c_in in fe_in.controles:
+            c = ControlFactorEscalamiento(
+                factor_escalamiento_id=fe.id,
+                descripcion=c_in.descripcion,
+                tag_activo=c_in.tag_activo,
+                estado_actual=c_in.estado_actual,
+            )
+            db.add(c)
+    db.flush()
+
+    # 4. Disparar recálculo de riesgo automático
+    recalc.recalcular(
+        db, [escenario_id], "Actualización de bloques BowTie interactivo", p.username, auditar=False
+    )
+    registrar(
+        db,
+        p.username,
+        "EDITAR_BOWTIE",
+        "escenario",
+        escenario_id,
+        antes=antes,
+        despues={
+            "causa": esc.causa,
+            "barreras_total": len(datos.barreras),
+            "factores_total": len(datos.factores_escalamiento),
+        },
+    )
+    db.commit()
+
+    return bowtie(escenario_id, db, p)
 

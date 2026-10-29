@@ -78,6 +78,8 @@ def a_escenario_out(
         palabra_guia_id=pg.id,
         palabra_guia=pg.nombre,
         causa=esc.causa,
+        peligro=esc.peligro,
+        evento_tope=esc.evento_tope,
         frecuencia_diseno=esc.frecuencia_diseno,
         consecuencia=esc.consecuencia,
         imp_economico=esc.imp_economico,

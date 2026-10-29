@@ -58,10 +58,42 @@ export interface ResumenDashboard {
   mapa_calor: CeldaMapa[]; priorizados: Priorizado[]
 }
 
+export interface ControlFactor {
+  id: number
+  factor_escalamiento_id: number
+  descripcion: string
+  tag_activo: string | null
+  estado_actual: Estado
+}
+
+export interface FactorEscalamiento {
+  id: number
+  escenario_id: number
+  escenario_barrera_id: number
+  barrera_tag: string
+  descripcion: string
+  categoria: string | null
+  controles: ControlFactor[]
+}
+
 export interface BowTie {
-  escenario_id: number; causa: string; evento_tope: string; consecuencia: string; ruta: string
-  preventivas: BarreraEscenario[]; mitigativas: BarreraEscenario[]
-  consecuencias: { categoria: string; nivel: number; texto: string }[]; resultado: Resultado | null
+  escenario_id: number
+  peligro: string
+  evento_tope: string
+  causa: string
+  frecuencia_diseno: string
+  consecuencia: string
+  ruta: string
+  imp_economico: number
+  imp_personas: number
+  imp_ambiente: number
+  imp_reputacion: number
+  preventivas: BarreraEscenario[]
+  mitigativas: BarreraEscenario[]
+  consecuencias: { categoria: string; nivel: number; texto: string }[]
+  factores_escalamiento: FactorEscalamiento[]
+  resultado: Resultado | null
+  layout?: Record<string, { x: number; y: number }> | null
 }
 
 export interface Api754 {

@@ -116,6 +116,8 @@ class EscenarioIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     palabra_guia_id: int
     causa: str = Field(min_length=1)
+    peligro: str | None = None
+    evento_tope: str | None = None
     frecuencia_diseno: Frecuencia
     consecuencia: str = Field(min_length=1)
     imp_economico: int = Field(ge=1, le=5)
@@ -127,6 +129,8 @@ class EscenarioIn(BaseModel):
 class EscenarioUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     causa: str | None = Field(default=None, min_length=1)
+    peligro: str | None = None
+    evento_tope: str | None = None
     frecuencia_diseno: Frecuencia | None = None
     consecuencia: str | None = Field(default=None, min_length=1)
     imp_economico: int | None = Field(default=None, ge=1, le=5)
@@ -147,6 +151,8 @@ class EscenarioOut(BaseModel):
     palabra_guia_id: int
     palabra_guia: str
     causa: str
+    peligro: str | None = None
+    evento_tope: str | None = None
     frecuencia_diseno: str
     consecuencia: str
     imp_economico: int
@@ -421,6 +427,92 @@ class CeldaMatrizIn(BaseModel):
     frecuencia: Frecuencia
     severidad: int = Field(ge=1, le=5)
     nivel: Literal["Bajo", "Medio", "Alto", "Extremo"]
+
+
+# ---------- BowTie 8 Bloques ----------
+class ControlFactorOut(BaseModel):
+    id: int
+    factor_escalamiento_id: int
+    descripcion: str
+    tag_activo: str | None = None
+    estado_actual: str = "DISPONIBLE"
+
+
+class FactorEscalamientoOut(BaseModel):
+    id: int
+    escenario_id: int
+    escenario_barrera_id: int
+    barrera_tag: str
+    descripcion: str
+    categoria: str | None = None
+    controles: list[ControlFactorOut] = []
+
+
+class ControlFactorIn(BaseModel):
+    id: int | None = None
+    descripcion: str = Field(min_length=1)
+    tag_activo: str | None = None
+    estado_actual: Estado = "DISPONIBLE"
+
+
+class FactorEscalamientoIn(BaseModel):
+    id: int | None = None
+    escenario_barrera_id: int | None = None
+    barrera_tag: str
+    descripcion: str = Field(min_length=1)
+    categoria: str | None = None
+    controles: list[ControlFactorIn] = []
+
+
+class BowTieBarreraIn(BaseModel):
+    barrera_id: int | None = None
+    tag_activo: str = Field(min_length=1)
+    descripcion: str = Field(min_length=1)
+    tipo: TipoBarrera = "EXISTENTE"
+    lado: Lado = "PREVENTIVA"
+    frr_diseno: float = Field(ge=1)
+    estado_actual: Estado = "DISPONIBLE"
+
+
+class BowTieGuardarIn(BaseModel):
+    peligro: str | None = None
+    evento_tope: str | None = None
+    causa: str = Field(min_length=1)
+    frecuencia_diseno: Frecuencia
+    consecuencia: str = Field(min_length=1)
+    imp_economico: int = Field(ge=1, le=5)
+    imp_personas: int = Field(ge=1, le=5)
+    imp_ambiente: int = Field(ge=1, le=5)
+    imp_reputacion: int = Field(ge=1, le=5)
+    barreras: list[BowTieBarreraIn] = []
+    factores_escalamiento: list[FactorEscalamientoIn] = []
+    layout: dict[str, Any] | None = None
+
+
+class ConsecuenciaBowTie(BaseModel):
+    categoria: str
+    nivel: int
+    texto: str
+
+
+class BowTieCompletoOut(BaseModel):
+    escenario_id: int
+    peligro: str
+    evento_tope: str
+    causa: str
+    frecuencia_diseno: str
+    consecuencia: str
+    ruta: str
+    imp_economico: int
+    imp_personas: int
+    imp_ambiente: int
+    imp_reputacion: int
+    preventivas: list[BarreraEscenarioOut]
+    mitigativas: list[BarreraEscenarioOut]
+    consecuencias: list[ConsecuenciaBowTie]
+    factores_escalamiento: list[FactorEscalamientoOut]
+    resultado: ResultadoOut | None
+    layout: dict[str, Any] | None = None
 
 
 class ConfiguracionOut(BaseModel):

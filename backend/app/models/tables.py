@@ -119,11 +119,17 @@ class Escenario(Base):
     imp_personas: Mapped[int] = mapped_column(Integer)
     imp_ambiente: Mapped[int] = mapped_column(Integer)
     imp_reputacion: Mapped[int] = mapped_column(Integer)
+    peligro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evento_tope: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bowtie_layout: Mapped[dict[str, Any] | None] = mapped_column(JsonType, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     activo: Mapped[bool] = mapped_column(default=True, server_default="1")
     updated_at: Mapped[datetime] = mapped_column(Ts, server_default=func.now(), onupdate=func.now())
     palabra_guia: Mapped[PalabraGuia] = relationship(back_populates="escenarios")
     barreras: Mapped[list[EscenarioBarrera]] = relationship(
+        back_populates="escenario", cascade="all, delete-orphan"
+    )
+    factores_escalamiento: Mapped[list[FactorEscalamiento]] = relationship(
         back_populates="escenario", cascade="all, delete-orphan"
     )
 
@@ -166,6 +172,41 @@ class EscenarioBarrera(Base):
     lado: Mapped[str] = mapped_column(String(12), default="PREVENTIVA", server_default="PREVENTIVA")
     escenario: Mapped[Escenario] = relationship(back_populates="barreras")
     barrera: Mapped[Barrera] = relationship(back_populates="escenarios")
+    factores_escalamiento: Mapped[list[FactorEscalamiento]] = relationship(
+        back_populates="escenario_barrera", cascade="all, delete-orphan"
+    )
+
+
+class FactorEscalamiento(Base):
+    """Factor de escalamiento (Escalation Factor) que puede comprometer la eficacia de una barrera."""
+
+    __tablename__ = "factor_escalamiento"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    escenario_id: Mapped[int] = mapped_column(ForeignKey("escenario.id", ondelete="CASCADE"), index=True)
+    escenario_barrera_id: Mapped[int] = mapped_column(ForeignKey("escenario_barrera.id", ondelete="CASCADE"), index=True)
+    descripcion: Mapped[str] = mapped_column(Text)
+    categoria: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    escenario: Mapped[Escenario] = relationship(back_populates="factores_escalamiento")
+    escenario_barrera: Mapped[EscenarioBarrera] = relationship(back_populates="factores_escalamiento")
+    controles: Mapped[list[ControlFactorEscalamiento]] = relationship(
+        back_populates="factor_escalamiento", cascade="all, delete-orphan"
+    )
+
+
+class ControlFactorEscalamiento(Base):
+    """Control o barrera de mitigación del factor de escalamiento (EF Barrier)."""
+
+    __tablename__ = "control_factor_escalamiento"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    factor_escalamiento_id: Mapped[int] = mapped_column(
+        ForeignKey("factor_escalamiento.id", ondelete="CASCADE"), index=True
+    )
+    descripcion: Mapped[str] = mapped_column(Text)
+    tag_activo: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    estado_actual: Mapped[str] = mapped_column(String(20), default="DISPONIBLE", server_default="DISPONIBLE")
+
+    factor_escalamiento: Mapped[FactorEscalamiento] = relationship(back_populates="controles")
 
 
 class EstadoBarreraHist(Base):
