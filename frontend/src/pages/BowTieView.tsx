@@ -273,8 +273,8 @@ const EscalationFactorNode = ({
     <div className="p-2 text-xs font-medium text-slate-800 dark:text-slate-200 line-clamp-2">
       {data.label}
     </div>
-    <Handle type="source" position={Position.Top} className="w-2.5 h-2.5 !bg-yellow-500" />
     <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 !bg-yellow-500" />
+    <Handle type="source" position={Position.Top} className="w-2.5 h-2.5 !bg-yellow-500" id="top" />
   </div>
 )
 
@@ -288,7 +288,7 @@ const EscalationControlNode = ({
     onClick={data.onEdit}
     className="w-44 cursor-pointer shadow-sm rounded border-2 border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2 text-left group transition-transform hover:scale-105"
   >
-    <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-slate-400" />
+    <Handle type="target" position={Position.Left} className="w-2.5 h-2.5 !bg-slate-400" />
     <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
       Control EF Barrier
     </div>
@@ -296,7 +296,8 @@ const EscalationControlNode = ({
       {data.label}
     </div>
     {data.tag && <div className="text-[9px] font-mono text-brand-600 mt-1">{data.tag}</div>}
-    <Handle type="source" position={Position.Top} className="w-2 h-2 !bg-slate-400" />
+    <Handle type="source" position={Position.Right} className="w-2.5 h-2.5 !bg-slate-400" id="right" />
+    <Handle type="source" position={Position.Top} className="w-2.5 h-2.5 !bg-slate-400" id="top" />
   </div>
 )
 
@@ -534,7 +535,8 @@ export const BowTieView: React.FC = () => {
       markerEnd: { type: MarkerType.ArrowClosed },
     })
 
-    // 7 y 8. Factores de Escalamiento y Controles
+    // 7 y 8. Factores de Escalamiento y Controles (EF Barriers)
+    // METODOLOGÍA: Escalation Factor -> Control (si existe) -> Barrera primaria
     bt.factores_escalamiento?.forEach((fe, idx) => {
       const feId = `fe-${fe.id || idx}`
       const bTargetId =
@@ -545,7 +547,7 @@ export const BowTieView: React.FC = () => {
       nodeList.push({
         id: feId,
         type: 'escalationFactorNode',
-        position: layout[feId] || { x: 260 + idx * 200, y: 410 },
+        position: layout[feId] || { x: 120 + idx * 240, y: 430 },
         data: {
           label: fe.descripcion,
           categoria: fe.categoria,
@@ -558,44 +560,65 @@ export const BowTieView: React.FC = () => {
         },
       })
 
-      // Conexión hacia la barrera que compromete
-      edgeList.push({
-        id: `e-${feId}-${bTargetId}`,
-        source: feId,
-        target: bTargetId,
-        targetHandle: 'escalation',
-        style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })
+      const tieneControles = fe.controles && fe.controles.length > 0
 
-      // Controles del factor de escalamiento
-      fe.controles?.forEach((ctrl, cIdx) => {
-        const ctrlId = `ctrl-${ctrl.id || `${idx}-${cIdx}`}`
-        nodeList.push({
-          id: ctrlId,
-          type: 'escalationControlNode',
-          position: layout[ctrlId] || { x: 380 + idx * 200, y: 415 },
-          data: {
-            label: ctrl.descripcion,
-            tag: ctrl.tag_activo,
-            estado: ctrl.estado_actual,
-            onEdit: () =>
-              esAdmin &&
-              setBloqueSeleccionado({
-                tipo: 'escalationControl',
-                control: ctrl,
-                factorId: fe.id,
-              }),
-          },
+      if (tieneControles) {
+        // Encadenar: Factor -> Control 1 -> Control 2 -> ... -> Barrera
+        let prevNodeId = feId
+        fe.controles.forEach((ctrl, cIdx) => {
+          const ctrlId = `ctrl-${ctrl.id || `${idx}-${cIdx}`}`
+          nodeList.push({
+            id: ctrlId,
+            type: 'escalationControlNode',
+            position: layout[ctrlId] || { x: 300 + idx * 240 + cIdx * 160, y: 435 },
+            data: {
+              label: ctrl.descripcion,
+              tag: ctrl.tag_activo,
+              estado: ctrl.estado_actual,
+              onEdit: () =>
+                esAdmin &&
+                setBloqueSeleccionado({
+                  tipo: 'escalationControl',
+                  control: ctrl,
+                  factorId: fe.id,
+                }),
+            },
+          })
+
+          // Conectar nodo previo (factor o control anterior) con este control
+          edgeList.push({
+            id: `e-${prevNodeId}-${ctrlId}`,
+            source: prevNodeId,
+            target: ctrlId,
+            style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
+
+          prevNodeId = ctrlId
         })
 
+        // Conectar el último control con la barrera principal
         edgeList.push({
-          id: `e-${feId}-${ctrlId}`,
-          source: feId,
-          target: ctrlId,
-          style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+          id: `e-${prevNodeId}-${bTargetId}`,
+          source: prevNodeId,
+          sourceHandle: 'top',
+          target: bTargetId,
+          targetHandle: 'escalation',
+          style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed },
         })
-      })
+      } else {
+        // Si no hay control interpuesto, conecta directamente: Factor -> Barrera
+        edgeList.push({
+          id: `e-${feId}-${bTargetId}`,
+          source: feId,
+          sourceHandle: 'top',
+          target: bTargetId,
+          targetHandle: 'escalation',
+          style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed },
+        })
+      }
     })
 
     setNodes(nodeList)
@@ -637,6 +660,15 @@ export const BowTieView: React.FC = () => {
 
       // Regla 6: Factor de Escalamiento conecta a Barrera (preventiva/reactiva) o a Control
       if (src.startsWith('fe-')) {
+        return (
+          tgt.startsWith('prev-') ||
+          tgt.startsWith('mit-') ||
+          tgt.startsWith('ctrl-')
+        )
+      }
+
+      // Regla 7: Control de Factor conecta a Barrera (preventiva/reactiva) o a otro Control
+      if (src.startsWith('ctrl-')) {
         return (
           tgt.startsWith('prev-') ||
           tgt.startsWith('mit-') ||
@@ -1233,21 +1265,50 @@ export const BowTieView: React.FC = () => {
 
               {/* Editar Factor de Escalamiento */}
               {bloqueSeleccionado.tipo === 'escalationFactor' && (
-                <div>
-                  <label className="label">Descripción del Factor de Escalamiento</label>
-                  <textarea
-                    className="input h-20"
-                    value={bloqueSeleccionado.factor.descripcion}
-                    onChange={(e) =>
-                      setBloqueSeleccionado({
-                        ...bloqueSeleccionado,
-                        factor: {
-                          ...bloqueSeleccionado.factor,
-                          descripcion: e.target.value,
-                        },
-                      })
-                    }
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="label">Descripción del Factor de Escalamiento</label>
+                    <textarea
+                      className="input h-20"
+                      value={bloqueSeleccionado.factor.descripcion}
+                      onChange={(e) =>
+                        setBloqueSeleccionado({
+                          ...bloqueSeleccionado,
+                          factor: {
+                            ...bloqueSeleccionado.factor,
+                            descripcion: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs w-full py-1.5 text-brand-600 dark:text-brand-400 font-semibold"
+                      onClick={() => {
+                        const fe = bt.factores_escalamiento?.find(
+                          (x) => x.id === bloqueSeleccionado.factor.id
+                        )
+                        if (fe) {
+                          const controles = fe.controles || []
+                          const nuevoCtrl = {
+                            descripcion: 'Nuevo Control EF (Barrera)',
+                            tag_activo: `CTRL-EF-${controles.length + 1}`,
+                            estado_actual: 'DISPONIBLE' as const,
+                          }
+                          fe.controles = [...controles, nuevoCtrl]
+                          handleGuardarBowTie()
+                          setBloqueSeleccionado(null)
+                        }
+                      }}
+                    >
+                      + Interponer Control / Barrera EF
+                    </button>
+                    <p className="text-[10px] text-slate-500 mt-1 text-center">
+                      Inserta un bloque de Control (EF Barrier) entre este Factor y la Barrera principal.
+                    </p>
+                  </div>
                 </div>
               )}
 

@@ -59,17 +59,17 @@ export interface ResumenDashboard {
 }
 
 export interface ControlFactor {
-  id: number
-  factor_escalamiento_id: number
+  id?: number
+  factor_escalamiento_id?: number
   descripcion: string
   tag_activo: string | null
   estado_actual: Estado
 }
 
 export interface FactorEscalamiento {
-  id: number
-  escenario_id: number
-  escenario_barrera_id: number
+  id?: number
+  escenario_id?: number
+  escenario_barrera_id?: number
   barrera_tag: string
   descripcion: string
   categoria: string | null
