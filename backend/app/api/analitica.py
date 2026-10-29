@@ -384,22 +384,19 @@ def guardar_bowtie(
             db.flush()
         mapa_tag_a_eb_id[b_in.tag_activo] = eb.id
 
-    # Eliminar barreras que se removieron del diagrama
-    for tag_ant, eb_ant in existentes_eb.items():
-        if tag_ant not in tags_enviados:
-            db.delete(eb_ant)
-    db.flush()
-
     # 3. Sincronizar Factores de Escalamiento y Controles
-    # Limpiamos factores previos de este escenario y recreamos los enviados
-    db.execute(
-        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
-    )
+    # Limpiamos factores previos de este escenario
     factores_antiguos = db.scalars(
         select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
     ).all()
     for fa in factores_antiguos:
         db.delete(fa)
+    db.flush()
+
+    # Eliminar barreras que se removieron del diagrama
+    for tag_ant, eb_ant in existentes_eb.items():
+        if tag_ant not in tags_enviados:
+            db.delete(eb_ant)
     db.flush()
 
     for fe_in in datos.factores_escalamiento:
