@@ -952,27 +952,6 @@ export const BowTieView: React.FC = () => {
           isValidConnection={isValidConnection}
           nodesDraggable={esAdmin}
           nodesConnectable={esAdmin}
-          onNodeDoubleClick={
-            esAdmin
-              ? (_evt, node) => {
-                  // Bloques estructurales fijos: no se eliminan
-                  if (node.id === 'hazard' || node.id === 'topEvent') return
-                  const labelMap: Record<string, string> = {
-                    threat: 'Amenaza',
-                    consequence: 'Consecuencia',
-                  }
-                  let label = labelMap[node.id] ?? ''
-                  if (!label) {
-                    if (node.id.startsWith('prev-')) label = `Barrera Preventiva: ${node.id.replace('prev-', '')}`
-                    else if (node.id.startsWith('mit-')) label = `Barrera Reactiva: ${node.id.replace('mit-', '')}`
-                    else if (node.id.startsWith('fe-')) label = `Factor de Escalamiento`
-                    else if (node.id.startsWith('ctrl-')) label = `Control de Factor (EF Barrier)`
-                    else label = node.id
-                  }
-                  setNodoAEliminar({ id: node.id, label })
-                }
-              : undefined
-          }
           fitView
           fitViewOptions={{ padding: 0.15 }}
           minZoom={0.2}
@@ -1582,12 +1561,48 @@ export const BowTieView: React.FC = () => {
             </div>
 
             {/* Botones de acción del Modal */}
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setBloqueSeleccionado(null)}
-                className="btn-secondary text-xs"
-              >
-                Cerrar
+            <div className="pt-2 flex justify-between gap-2 border-t border-slate-100 dark:border-slate-800">
+              {/* Botón eliminar — solo para bloques eliminables (no hazard ni topEvent ni bloques nuevos) */}
+              {!['hazard', 'topEvent', 'nuevaBarrera', 'nuevoFactor'].includes(bloqueSeleccionado.tipo) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const s = bloqueSeleccionado
+                    let nodeId = ''
+                    let label = ''
+                    if (s.tipo === 'threat') { nodeId = 'threat'; label = 'Amenaza' }
+                    else if (s.tipo === 'consequence') { nodeId = 'consequence'; label = 'Consecuencia' }
+                    else if (s.tipo === 'barrier') {
+                      nodeId = `${s.lado === 'PREVENTIVA' ? 'prev' : 'mit'}-${s.barrera.tag_activo}`
+                      label = `Barrera ${s.lado === 'PREVENTIVA' ? 'Preventiva' : 'Reactiva'}: ${s.barrera.tag_activo}`
+                    }
+                    else if (s.tipo === 'escalationFactor') {
+                      nodeId = `fe-${s.factor.id}`
+                      label = `Factor de Escalamiento`
+                    }
+                    else if (s.tipo === 'escalationControl') {
+                      nodeId = `ctrl-${s.control.id}`
+                      label = `Control de Factor (EF Barrier)`
+                    }
+                    if (nodeId) {
+                      setBloqueSeleccionado(null)
+                      setNodoAEliminar({ id: nodeId, label })
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors flex items-center gap-1"
+                >
+                  🗑 Eliminar bloque
+                </button>
+              ) : (
+                <span />
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBloqueSeleccionado(null)}
+                  className="btn-secondary text-xs"
+                >
+                  Cerrar
               </button>
               <button
                 onClick={() => {
@@ -1681,13 +1696,14 @@ export const BowTieView: React.FC = () => {
               >
                 Aplicar y Guardar
               </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* ========================================================
-          6. MODAL DE CONFIRMACIÓN DE ELIMINACIÓN (doble clic)
+          6. MODAL DE CONFIRMACIÓN DE ELIMINACIÓN
           ======================================================== */}
       {nodoAEliminar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
