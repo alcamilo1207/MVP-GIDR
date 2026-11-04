@@ -26,3 +26,44 @@
   .tbl tbody tr { @apply hover:bg-slate-50 dark:hover:bg-slate-800/50; }
   .chip { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold; }
 }
+
+@keyframes gidr-ticker-rtl {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes gidr-item-enter-rtl {
+  0% {
+    opacity: 0;
+    transform: translate3d(64px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.gidr-ticker-track {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  white-space: nowrap;
+  will-change: transform;
+  animation: gidr-ticker-rtl var(--ticker-duration, 32s) linear infinite;
+}
+
+.gidr-ticker-track:hover {
+  animation-play-state: paused;
+}
+
+.gidr-ticker-item-new {
+  animation: gidr-item-enter-rtl 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }

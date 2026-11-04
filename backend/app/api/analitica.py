@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter
@@ -19,6 +20,7 @@ from app.models import (
     EscenarioBarrera,
     EstadoBarreraHist,
     FactorEscalamiento,
+    PalabraGuia,
 )
 from app.schemas import (
     BarreraEscenarioOut,
@@ -294,7 +296,24 @@ def guardar_bowtie(
         "imp_reputacion": esc.imp_reputacion,
     }
 
-    # 1. Actualizar atributos de escenario (Amenaza, Peligro, Evento Tope, Consecuencia)
+    # 1. Actualizar atributos de escenario (Desviación, Amenaza, Peligro, Evento Tope, Consecuencia)
+    if datos.palabra_guia and datos.palabra_guia.strip():
+        pg_actual = db.get(PalabraGuia, esc.palabra_guia_id)
+        if pg_actual and pg_actual.nombre != datos.palabra_guia.strip():
+            pg_existente = db.scalars(
+                select(PalabraGuia).where(
+                    PalabraGuia.nodo_id == pg_actual.nodo_id,
+                    PalabraGuia.nombre == datos.palabra_guia.strip(),
+                )
+            ).first()
+            if pg_existente:
+                esc.palabra_guia_id = pg_existente.id
+            else:
+                nueva_pg = PalabraGuia(nodo_id=pg_actual.nodo_id, nombre=datos.palabra_guia.strip())
+                db.add(nueva_pg)
+                db.flush()
+                esc.palabra_guia_id = nueva_pg.id
+
     esc.causa = datos.causa
     esc.peligro = datos.peligro
     esc.evento_tope = datos.evento_tope
@@ -330,13 +349,25 @@ def guardar_bowtie(
             )
         ).first()
 
+        vig_desde = b_in.vigencia_desde
+        vig_hasta = b_in.vigencia_hasta
+        moc_ref = b_in.moc_ref
+        if b_in.tipo == "TEMPORAL":
+            vig_desde = vig_desde or recalc.hoy()
+            vig_hasta = vig_hasta or (recalc.hoy() + timedelta(days=30))
+            moc_ref = moc_ref or "MOC-PHA-TEMP"
+
         if barrera is None:
             barrera = Barrera(
                 empresa_id=empresa_id,
                 tag_activo=b_in.tag_activo,
                 descripcion=b_in.descripcion,
                 tipo=b_in.tipo,
+                vigencia_desde=vig_desde,
+                vigencia_hasta=vig_hasta,
+                moc_ref=moc_ref,
                 estado_actual=b_in.estado_actual,
+                factor_degradacion=b_in.factor_degradacion,
                 estado_actualizado=recalc.ahora(),
             )
             db.add(barrera)
@@ -346,13 +377,18 @@ def guardar_bowtie(
                     barrera_id=barrera.id,
                     ts=recalc.ahora(),
                     estado=b_in.estado_actual,
-                    fuente="BOWTIE_EDITOR",
-                    detalle={"nota": "Creada desde editor BowTie"},
+                    fuente="BOWTIE_PHA_EDITOR",
+                    detalle={"nota": "Creada desde editor PHA/BowTie", "factor_degradacion": b_in.factor_degradacion},
                 )
             )
         else:
             barrera.descripcion = b_in.descripcion
             barrera.tipo = b_in.tipo
+            barrera.factor_degradacion = b_in.factor_degradacion
+            if b_in.tipo == "TEMPORAL":
+                barrera.vigencia_desde = vig_desde
+                barrera.vigencia_hasta = vig_hasta
+                barrera.moc_ref = moc_ref
             if barrera.estado_actual != b_in.estado_actual:
                 ant_est = barrera.estado_actual
                 barrera.estado_actual = b_in.estado_actual
@@ -362,8 +398,8 @@ def guardar_bowtie(
                         barrera_id=barrera.id,
                         ts=recalc.ahora(),
                         estado=b_in.estado_actual,
-                        fuente="BOWTIE_EDITOR",
-                        detalle={"antes": ant_est},
+                        fuente="BOWTIE_PHA_EDITOR",
+                        detalle={"antes": ant_est, "factor_degradacion": b_in.factor_degradacion},
                     )
                 )
 
@@ -384,19 +420,22 @@ def guardar_bowtie(
             db.flush()
         mapa_tag_a_eb_id[b_in.tag_activo] = eb.id
 
+    # Eliminar barreras que se removieron del diagrama
+    for tag_ant, eb_ant in existentes_eb.items():
+        if tag_ant not in tags_enviados:
+            db.delete(eb_ant)
+    db.flush()
+
     # 3. Sincronizar Factores de Escalamiento y Controles
-    # Limpiamos factores previos de este escenario
+    # Limpiamos factores previos de este escenario y recreamos los enviados
+    db.execute(
+        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
+    )
     factores_antiguos = db.scalars(
         select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == escenario_id)
     ).all()
     for fa in factores_antiguos:
         db.delete(fa)
-    db.flush()
-
-    # Eliminar barreras que se removieron del diagrama
-    for tag_ant, eb_ant in existentes_eb.items():
-        if tag_ant not in tags_enviados:
-            db.delete(eb_ant)
     db.flush()
 
     for fe_in in datos.factores_escalamiento:

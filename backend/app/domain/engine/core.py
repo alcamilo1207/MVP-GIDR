@@ -57,6 +57,7 @@ class BarreraEntrada:
     vigencia_desde: date | None = None
     vigencia_hasta: date | None = None
     lado: str = "PREVENTIVA"
+    factor_degradacion: int | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class DetalleBarrera:
     frr_efectivo: float
     cuenta_en_diseno: bool
     vigente: bool  # False solo para temporales fuera de vigencia
+    factor_degradacion: int = 90
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,14 @@ class ResultadoMotor:
     brecha: int
     barreras: tuple[DetalleBarrera, ...]
     version_motor: str
+    riesgo_diseno_economico: str = "Bajo"
+    riesgo_diseno_personas: str = "Bajo"
+    riesgo_diseno_ambiente: str = "Bajo"
+    riesgo_diseno_reputacion: str = "Bajo"
+    riesgo_actual_economico: str = "Bajo"
+    riesgo_actual_personas: str = "Bajo"
+    riesgo_actual_ambiente: str = "Bajo"
+    riesgo_actual_reputacion: str = "Bajo"
 
 
 def indice_frecuencia(frecuencia: str) -> int:
@@ -117,9 +127,18 @@ def frecuencia_tras_frr(idx_diseno: int, frr_total: float) -> int:
     return min(c.IDX_MAX_FRECUENCIA, idx_diseno + c.CATEGORIAS_POR_DECADA * decadas(frr_total))
 
 
-def frr_efectivo(frr_diseno: float, estado: str, multiplicadores: Mapping[str, float]) -> float:
-    """FRR × multiplicador(estado); si es < 1 (incluye 0) el aporte es 1 (sin crédito)."""
-    efectivo = frr_diseno * multiplicadores.get(estado, 0.0)
+def frr_efectivo(
+    frr_diseno: float,
+    estado: str,
+    multiplicadores: Mapping[str, float],
+    factor_degradacion: int | None = None,
+) -> float:
+    """FRR × multiplicador(estado); si DEGRADADO con factor_degradacion (1..100), usa (100 - D)/100."""
+    if estado == "DEGRADADO" and factor_degradacion is not None and factor_degradacion != 90:
+        mult = max(0.0, min(1.0, (100 - factor_degradacion) / 100.0))
+    else:
+        mult = multiplicadores.get(estado, 0.0)
+    efectivo = frr_diseno * mult
     return efectivo if efectivo >= 1 else 1.0
 
 
@@ -134,7 +153,12 @@ def detallar_barrera(
 ) -> DetalleBarrera:
     es_temporal = b.tipo == "TEMPORAL"
     vigente = temporal_vigente(b, hoy) if es_temporal else True
-    efectivo = frr_efectivo(b.frr_diseno, b.estado, config.multiplicadores) if vigente else 1.0
+    deg = b.factor_degradacion if b.factor_degradacion is not None else 90
+    efectivo = (
+        frr_efectivo(b.frr_diseno, b.estado, config.multiplicadores, b.factor_degradacion)
+        if vigente
+        else 1.0
+    )
     return DetalleBarrera(
         tag=b.tag,
         tipo=b.tipo,
@@ -143,6 +167,7 @@ def detallar_barrera(
         frr_efectivo=efectivo,
         cuenta_en_diseno=not es_temporal,
         vigente=vigente,
+        factor_degradacion=deg,
     )
 
 
@@ -189,4 +214,12 @@ def evaluar_escenario(
         brecha=indice_nivel(riesgo_actual) - indice_nivel(riesgo_diseno),
         barreras=detalles,
         version_motor=config.version,
+        riesgo_diseno_economico=nivel_matriz(config, idx_diseno, impactos.economico),
+        riesgo_diseno_personas=nivel_matriz(config, idx_diseno, impactos.personas),
+        riesgo_diseno_ambiente=nivel_matriz(config, idx_diseno, impactos.ambiente),
+        riesgo_diseno_reputacion=nivel_matriz(config, idx_diseno, impactos.reputacion),
+        riesgo_actual_economico=nivel_matriz(config, idx_actual, impactos.economico),
+        riesgo_actual_personas=nivel_matriz(config, idx_actual, impactos.personas),
+        riesgo_actual_ambiente=nivel_matriz(config, idx_actual, impactos.ambiente),
+        riesgo_actual_reputacion=nivel_matriz(config, idx_actual, impactos.reputacion),
     )

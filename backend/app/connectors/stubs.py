@@ -4,12 +4,53 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.connectors.base import BaseConnector, ResultadoNormalizacion
+from app.connectors.base import BaseConnector, EventoEstado, ResultadoNormalizacion
+from app.services import recalc
 
 
 class _Stub(BaseConnector):
+    implementado = False
+
     def normalizar(self, payload: Any) -> ResultadoNormalizacion:
         raise NotImplementedError(f"Conector {self.nombre} no implementado en el MVP")
+
+
+class GemeloDigitalConnector(BaseConnector):
+    """Conector activo para Datos de Telemetría de Planta (telemetría híbrida continua y discreta)."""
+
+    nombre = "GEMELO_DIGITAL"
+    descripcion = "Datos de Telemetría de Planta: flujo en tiempo real (WebSocket / REST)"
+    implementado = True
+
+    def normalizar(self, payload: Any) -> ResultadoNormalizacion:
+        res = ResultadoNormalizacion()
+        for item in payload or []:
+            res.eventos.append(
+                EventoEstado(
+                    tag_activo=str(item["tag_activo"]),
+                    estado=str(item.get("estado", "DISPONIBLE")),
+                    fuente=str(item.get("fuente", self.nombre)),
+                    fecha=item.get("fecha") or recalc.ahora(),
+                    detalle=item.get("detalle") or {},
+                    factor_degradacion=item.get("factor_degradacion"),
+                )
+            )
+        return res
+
+
+class DcsScadaConnector(GemeloDigitalConnector):
+    nombre = "DCS_SCADA"
+    descripcion = "DCS / SCADA: modos de control (AUTO/MAN) y alarmas inhibidas"
+
+
+class SisPlantaConnector(GemeloDigitalConnector):
+    nombre = "SIS_PLANTA"
+    descripcion = "SIS: llaves de inhibición (MOS / Bypass) y fallas de diagnóstico"
+
+
+class HistoriadorIowConnector(GemeloDigitalConnector):
+    nombre = "HISTORIADOR_IOW"
+    descripcion = "Historiador de Procesos: excursiones IOW y degradación progresiva (1-100%)"
 
 
 class RondasConnector(_Stub):

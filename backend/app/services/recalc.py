@@ -62,6 +62,7 @@ def entradas(esc: Escenario, override: Mapping[int, str] | None = None) -> list[
             vigencia_desde=v.barrera.vigencia_desde,
             vigencia_hasta=v.barrera.vigencia_hasta,
             lado=v.lado,
+            factor_degradacion=v.barrera.factor_degradacion,
         )
         for v in esc.barreras
     ]

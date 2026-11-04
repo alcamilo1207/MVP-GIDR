@@ -81,7 +81,13 @@ class Nodo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     unidad_id: Mapped[int] = mapped_column(ForeignKey("unidad.id", ondelete="CASCADE"), index=True)
     nombre: Mapped[str] = mapped_column(String(200))
-    descripcion: Mapped[str | None] = mapped_column(Text)
+    descripcion: Mapped[str | None] = mapped_column(Text)  # "Intención" del nodo
+    condiciones_diseno: Mapped[str | None] = mapped_column(Text)
+    condiciones_operacion: Mapped[str | None] = mapped_column(Text)
+    color: Mapped[str | None] = mapped_column(String(40))
+    sesion: Mapped[str | None] = mapped_column(String(80))
+    planos: Mapped[list[str] | None] = mapped_column(JsonType)
+    comentarios: Mapped[str | None] = mapped_column(Text)
     unidad: Mapped[Unidad] = relationship(back_populates="nodos")
     palabras_guia: Mapped[list[PalabraGuia]] = relationship(back_populates="nodo", cascade="all, delete-orphan")
 
@@ -103,7 +109,7 @@ class Escenario(Base):
 
     __tablename__ = "escenario"
     __table_args__ = (
-        UniqueConstraint("palabra_guia_id", "causa"),
+        UniqueConstraint("palabra_guia_id", "consecuencia", "causa"),
         CheckConstraint(f"frecuencia_diseno {FREC_CHECK}", name="frecuencia_diseno"),
         CheckConstraint("imp_economico BETWEEN 1 AND 5", name="imp_economico"),
         CheckConstraint("imp_personas BETWEEN 1 AND 5", name="imp_personas"),
@@ -140,6 +146,7 @@ class Barrera(Base):
         UniqueConstraint("empresa_id", "tag_activo"),
         CheckConstraint("tipo IN ('EXISTENTE','TEMPORAL')", name="tipo"),
         CheckConstraint(f"estado_actual {ESTADOS_CHECK}", name="estado_actual"),
+        CheckConstraint("factor_degradacion BETWEEN 1 AND 100", name="factor_degradacion"),
         CheckConstraint("tipo = 'EXISTENTE' OR vigencia_hasta IS NOT NULL", name="temporal_vigencia"),
         Index("ix_barrera_estado_actual", "estado_actual"),
     )
@@ -152,6 +159,7 @@ class Barrera(Base):
     vigencia_hasta: Mapped[date | None] = mapped_column(Date)
     moc_ref: Mapped[str | None] = mapped_column(String(100))
     estado_actual: Mapped[str] = mapped_column(String(20), default="DISPONIBLE")
+    factor_degradacion: Mapped[int] = mapped_column(Integer, default=90, server_default="90")
     estado_actualizado: Mapped[datetime | None] = mapped_column(Ts)
     escenarios: Mapped[list[EscenarioBarrera]] = relationship(
         back_populates="barrera", cascade="all, delete-orphan"
@@ -323,3 +331,35 @@ class Usuario(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True)
     password_hash: Mapped[str] = mapped_column(String(300))
     rol: Mapped[str] = mapped_column(String(10))
+
+
+class VinculoGemelo(Base):
+    """Vínculo dinámico entre una señal/tag del Gemelo Digital (DCS, SIS, Historiador, CMMS) y una Barrera."""
+
+    __tablename__ = "vinculo_gemelo"
+    __table_args__ = (
+        UniqueConstraint("tag_gemelo"),
+        CheckConstraint(
+            "sistema_fuente IN ('DCS_SCADA','SIS','HISTORIADOR_IOW','CMMS','GEMELO_DIGITAL')",
+            name="sistema_fuente",
+        ),
+        CheckConstraint(
+            "tipo_evaluacion IN ('ESTADO_DISCRETO','SALUD_DEGRADACION','UMBRAL_IOW')",
+            name="tipo_evaluacion",
+        ),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    barrera_id: Mapped[int] = mapped_column(ForeignKey("barrera.id", ondelete="CASCADE"), index=True)
+    sistema_fuente: Mapped[str] = mapped_column(String(40), default="GEMELO_DIGITAL")
+    tag_gemelo: Mapped[str] = mapped_column(String(150))
+    descripcion: Mapped[str] = mapped_column(Text)
+    tipo_evaluacion: Mapped[str] = mapped_column(String(30), default="SALUD_DEGRADACION")
+    unidad_ing: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    umbral_alerta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    umbral_critico: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ultimo_valor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ultimo_estado_evaluado: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ultima_actualizacion: Mapped[datetime | None] = mapped_column(Ts, nullable=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="1")
+    barrera: Mapped[Barrera] = relationship()
+

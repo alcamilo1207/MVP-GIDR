@@ -720,6 +720,10 @@ export const BowTieView: React.FC = () => {
           lado: 'PREVENTIVA',
           frr_diseno: p.frr_diseno,
           estado_actual: p.estado_actual,
+          factor_degradacion: p.factor_degradacion ?? 90,
+          vigencia_desde: p.vigencia_desde,
+          vigencia_hasta: p.vigencia_hasta,
+          moc_ref: p.moc_ref,
         })),
         ...bt.mitigativas.map((m) => ({
           tag_activo: m.tag_activo,
@@ -728,6 +732,10 @@ export const BowTieView: React.FC = () => {
           lado: 'MITIGATIVA',
           frr_diseno: m.frr_diseno,
           estado_actual: m.estado_actual,
+          factor_degradacion: m.factor_degradacion ?? 90,
+          vigencia_desde: m.vigencia_desde,
+          vigencia_hasta: m.vigencia_hasta,
+          moc_ref: m.moc_ref,
         })),
       ],
       factores_escalamiento: (bt.factores_escalamiento || []).map((fe) => ({
@@ -1243,6 +1251,30 @@ export const BowTieView: React.FC = () => {
                       </select>
                     </div>
                   </div>
+                  {bloqueSeleccionado.barrera.estado_actual === 'DEGRADADO' && (
+                    <div>
+                      <label className="label">Factor de Degradación (1-100%)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        className="input"
+                        value={bloqueSeleccionado.barrera.factor_degradacion ?? 90}
+                        onChange={(e) =>
+                          setBloqueSeleccionado({
+                            ...bloqueSeleccionado,
+                            barrera: {
+                              ...bloqueSeleccionado.barrera,
+                              factor_degradacion: Math.max(
+                                1,
+                                Math.min(100, Number(e.target.value) || 1)
+                              ),
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                  )}
                 </>
               )}
 

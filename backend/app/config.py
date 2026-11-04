@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "cambiar-este-secreto-en-produccion-0123456789"
     jwt_algoritmo: str = "HS256"
     jwt_minutos: int = 480
-    cors_origenes: str = "http://localhost:5173,http://localhost:3000"
+    cors_origenes: str = "http://localhost:5173,http://localhost:3000,http://localhost:5174"
     auto_seed: bool = True
     #: Días antes del vencimiento para considerar una barrera temporal "próxima a vencer".
     dias_alerta_vencimiento: int = 7

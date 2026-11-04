@@ -76,6 +76,12 @@ class NodoIn(BaseModel):
     unidad_id: int
     nombre: str = Field(min_length=1, max_length=200)
     descripcion: str | None = None
+    condiciones_diseno: str | None = None
+    condiciones_operacion: str | None = None
+    color: str | None = Field(default=None, max_length=40)
+    sesion: str | None = Field(default=None, max_length=80)
+    planos: list[str] | None = None
+    comentarios: str | None = None
 
 
 class NodoOut(Orm, NodoIn):
@@ -114,7 +120,9 @@ class EscenarioIn(BaseModel):
     """Solo campos de ENTRADA; los calculados los deriva el motor y no se aceptan aquí."""
 
     model_config = ConfigDict(extra="forbid")
-    palabra_guia_id: int
+    palabra_guia_id: int | None = None
+    nodo_id: int | None = None
+    palabra_guia: str | None = None
     causa: str = Field(min_length=1)
     peligro: str | None = None
     evento_tope: str | None = None
@@ -137,6 +145,48 @@ class EscenarioUpdate(BaseModel):
     imp_personas: int | None = Field(default=None, ge=1, le=5)
     imp_ambiente: int | None = Field(default=None, ge=1, le=5)
     imp_reputacion: int | None = Field(default=None, ge=1, le=5)
+
+
+class RiesgosPorImpactoOut(BaseModel):
+    economico: str
+    personas: str
+    ambiente: str
+    reputacion: str
+
+
+class ControlFactorOut(BaseModel):
+    id: int
+    factor_escalamiento_id: int
+    descripcion: str
+    tag_activo: str | None = None
+    estado_actual: str = "DISPONIBLE"
+
+
+class FactorEscalamientoOut(BaseModel):
+    id: int
+    escenario_id: int
+    escenario_barrera_id: int
+    barrera_tag: str
+    descripcion: str
+    categoria: str | None = None
+    controles: list[ControlFactorOut] = []
+
+
+class BarreraEscenarioOut(BaseModel):
+    barrera_id: int
+    tag_activo: str
+    descripcion: str
+    tipo: TipoBarrera
+    estado_actual: str
+    factor_degradacion: int = 90
+    lado: str
+    frr_diseno: float
+    frr_efectivo: float
+    cuenta_en_diseno: bool
+    vigente: bool
+    vigencia_desde: date | None
+    vigencia_hasta: date | None
+    moc_ref: str | None
 
 
 class EscenarioOut(BaseModel):
@@ -162,22 +212,10 @@ class EscenarioOut(BaseModel):
     version: int
     n_barreras: int = 0
     resultado: ResultadoOut | None = None
-
-
-class BarreraEscenarioOut(BaseModel):
-    barrera_id: int
-    tag_activo: str
-    descripcion: str
-    tipo: TipoBarrera
-    estado_actual: str
-    lado: str
-    frr_diseno: float
-    frr_efectivo: float
-    cuenta_en_diseno: bool
-    vigente: bool
-    vigencia_desde: date | None
-    vigencia_hasta: date | None
-    moc_ref: str | None
+    barreras: list[BarreraEscenarioOut] = []
+    factores_escalamiento: list[FactorEscalamientoOut] = []
+    riesgo_diseno_imp: RiesgosPorImpactoOut | None = None
+    riesgo_actual_imp: RiesgosPorImpactoOut | None = None
 
 
 class EscenarioDetalle(EscenarioOut):
@@ -226,6 +264,7 @@ class BarreraUpdate(BaseModel):
     vigencia_desde: date | None = None
     vigencia_hasta: date | None = None
     moc_ref: str | None = None
+    factor_degradacion: int | None = Field(default=None, ge=1, le=100)
 
 
 class BarreraOut(Orm):
@@ -238,6 +277,7 @@ class BarreraOut(Orm):
     vigencia_hasta: date | None
     moc_ref: str | None
     estado_actual: str
+    factor_degradacion: int = 90
     estado_actualizado: datetime | None
     n_escenarios: int = 0
 
@@ -260,6 +300,7 @@ class BarreraDetalle(BarreraOut):
 
 class CambioEstadoIn(BaseModel):
     estado: Estado
+    factor_degradacion: int | None = Field(default=None, ge=1, le=100)
     fuente: str = "UI_SIMULACION"
     detalle: dict[str, Any] | None = None
     aplicar: bool = True
@@ -429,25 +470,7 @@ class CeldaMatrizIn(BaseModel):
     nivel: Literal["Bajo", "Medio", "Alto", "Extremo"]
 
 
-# ---------- BowTie 8 Bloques ----------
-class ControlFactorOut(BaseModel):
-    id: int
-    factor_escalamiento_id: int
-    descripcion: str
-    tag_activo: str | None = None
-    estado_actual: str = "DISPONIBLE"
-
-
-class FactorEscalamientoOut(BaseModel):
-    id: int
-    escenario_id: int
-    escenario_barrera_id: int
-    barrera_tag: str
-    descripcion: str
-    categoria: str | None = None
-    controles: list[ControlFactorOut] = []
-
-
+# ---------- BowTie 8 Bloques & Hoja PHA ----------
 class ControlFactorIn(BaseModel):
     id: int | None = None
     descripcion: str = Field(min_length=1)
@@ -472,9 +495,14 @@ class BowTieBarreraIn(BaseModel):
     lado: Lado = "PREVENTIVA"
     frr_diseno: float = Field(ge=1)
     estado_actual: Estado = "DISPONIBLE"
+    factor_degradacion: int = Field(default=90, ge=1, le=100)
+    vigencia_desde: date | None = None
+    vigencia_hasta: date | None = None
+    moc_ref: str | None = None
 
 
 class BowTieGuardarIn(BaseModel):
+    palabra_guia: str | None = None
     peligro: str | None = None
     evento_tope: str | None = None
     causa: str = Field(min_length=1)
@@ -521,3 +549,62 @@ class ConfiguracionOut(BaseModel):
     politica_estado: dict[str, float]
     matriz: list[CeldaMatrizIn]
     supuestos: list[str]
+
+
+# ---------- Gemelo Digital y Vínculos Dinámicos en Tiempo Real ----------
+SistemaFuenteGemelo = Literal["DCS_SCADA", "SIS", "HISTORIADOR_IOW", "CMMS", "GEMELO_DIGITAL"]
+TipoEvaluacionGemelo = Literal["ESTADO_DISCRETO", "SALUD_DEGRADACION", "UMBRAL_IOW"]
+
+
+class VinculoGemeloIn(BaseModel):
+    barrera_id: int
+    sistema_fuente: SistemaFuenteGemelo = "GEMELO_DIGITAL"
+    tag_gemelo: str = Field(min_length=1, max_length=150)
+    descripcion: str = Field(min_length=1)
+    tipo_evaluacion: TipoEvaluacionGemelo = "SALUD_DEGRADACION"
+    unidad_ing: str | None = None
+    umbral_alerta: float | None = None
+    umbral_critico: float | None = None
+    activo: bool = True
+
+
+class VinculoGemeloOut(BaseModel):
+    id: int
+    barrera_id: int
+    barrera_tag: str
+    barrera_descripcion: str
+    barrera_estado: str
+    barrera_factor_degradacion: int
+    barrera_frr_diseno: float = 10.0
+    sistema_fuente: str
+    tag_gemelo: str
+    descripcion: str
+    tipo_evaluacion: str
+    unidad_ing: str | None = None
+    umbral_alerta: float | None = None
+    umbral_critico: float | None = None
+    ultimo_valor: float | None = None
+    ultimo_estado_evaluado: str | None = None
+    ultima_actualizacion: datetime | None = None
+    activo: bool
+
+
+class LecturaTelemetriaIn(BaseModel):
+    tag_gemelo: str | None = None
+    barrera_tag: str | None = None
+    valor: float | None = None
+    estado_manual: Estado | None = None
+    factor_degradacion: int | None = Field(default=None, ge=1, le=100)
+    fuente: str | None = None
+
+
+class TelemetriaBatchIn(BaseModel):
+    lecturas: list[LecturaTelemetriaIn] = Field(min_length=1, max_length=500)
+
+
+class ResultadoTelemetriaOut(BaseModel):
+    procesadas: int
+    barreras_actualizadas: int
+    escenarios_recalculados: int
+    eventos_emitidos: list[dict[str, Any]]
+

@@ -196,11 +196,22 @@ def cambiar_estado(id_: int, datos: CambioEstadoIn, db: DbSession, p: Admin) -> 
     """
     b = _obtener(db, id_)
     anterior = b.estado_actual
+    deg_anterior = b.factor_degradacion
+    if datos.factor_degradacion is not None:
+        b.factor_degradacion = datos.factor_degradacion
+        db.flush()
     impacto_raw = recalc.simular_cambio_estado(db, b, datos.estado)
     if datos.aplicar:
         ev = EventoEstado(b.tag_activo, datos.estado, datos.fuente, recalc.ahora(), datos.detalle or {})
         cmms.aplicar_eventos(db, [ev], p.username)
+        if datos.factor_degradacion is not None and datos.factor_degradacion != deg_anterior and anterior == datos.estado:
+            ids = recalc.escenarios_de_barrera(db, b.id)
+            if ids:
+                recalc.recalcular(db, ids, f"Cambio de factor de degradación en {b.tag_activo} ({datos.factor_degradacion}%)", p.username, auditar=False)
         db.commit()
+    elif datos.factor_degradacion is not None:
+        b.factor_degradacion = deg_anterior
+        db.flush()
     impacto = [ImpactoEscenario(
         escenario_id=int(i["escenario_id"]),  # type: ignore[call-overload]
         causa=str(i["causa"]),

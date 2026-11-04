@@ -1,4 +1,7 @@
-const BASE = '/api'
+const rawApiUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string; DEV?: boolean } }).env?.VITE_API_URL
+const BASE = rawApiUrl
+  ? rawApiUrl.replace(/\/+$/, '')
+  : ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ? 'http://localhost:8000' : '/api')
 const KEY = 'gidr_token'
 
 export const tokenStore = {

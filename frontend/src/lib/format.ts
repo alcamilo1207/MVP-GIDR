@@ -9,10 +9,10 @@ export const NIVEL_CLASES: Record<Nivel, string> = {
   Extremo: 'bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300',
 }
 export const NIVEL_CELDA: Record<Nivel, string> = {
-  Bajo: 'bg-emerald-200/80 dark:bg-emerald-900/60',
-  Medio: 'bg-yellow-200/80 dark:bg-yellow-800/50',
-  Alto: 'bg-orange-300/80 dark:bg-orange-800/60',
-  Extremo: 'bg-red-400/80 dark:bg-red-800/70',
+  Bajo: 'bg-emerald-300 dark:bg-emerald-700 text-emerald-950 dark:text-white',
+  Medio: 'bg-yellow-300 dark:bg-yellow-600 text-yellow-950 dark:text-white',
+  Alto: 'bg-orange-400 dark:bg-orange-600 text-orange-950 dark:text-white',
+  Extremo: 'bg-red-500 dark:bg-red-700 text-white',
 }
 export const NIVEL_HEX: Record<Nivel, string> = { Bajo: '#10b981', Medio: '#eab308', Alto: '#f97316', Extremo: '#dc2626' }
 

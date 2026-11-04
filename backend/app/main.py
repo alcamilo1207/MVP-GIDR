@@ -8,14 +8,16 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import analitica, auth, barreras, escenarios, integraciones, jerarquia, sistema
 from app.config import get_settings
 from app.db import SessionLocal
 from app.errors import instalar_manejadores
+from app.schemas import LecturaTelemetriaIn
 from app.services import recalc
+from app.services.realtime import gestor_ws
 
 log = logging.getLogger("gidr")
 
@@ -62,14 +64,52 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+_cors_origenes = [o.strip() for o in get_settings().cors_origenes.split(",") if o.strip()]
+_es_asterisco = "*" in _cors_origenes
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in get_settings().cors_origenes.split(",")],
+    allow_origins=["*"] if _es_asterisco else _cors_origenes,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
+    allow_credentials=not _es_asterisco,
 )
 instalar_manejadores(app)
 for r in (auth.router, jerarquia.router, escenarios.router, barreras.router, integraciones.router,
           analitica.router, sistema.router):
     app.include_router(r)
+
+
+@app.websocket("/ws/eventos")
+async def ws_eventos(ws: WebSocket) -> None:
+    """Canal WebSocket en tiempo real hacia todas las pantallas del frontend (Escenarios PHA, BowTie, Dashboard)."""
+    await gestor_ws.conectar(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        gestor_ws.desconectar(ws)
+    except Exception:  # noqa: BLE001
+        gestor_ws.desconectar(ws)
+
+
+@app.websocket("/ws/gemelo")
+async def ws_gemelo(ws: WebSocket) -> None:
+    """Canal WebSocket de ingesta directa para un Gemelo Digital externo en tiempo real.
+    Acepta mensajes JSON: ``{"lecturas": [{"tag_gemelo": "...", "valor": 95.0}]}``.
+    """
+    await ws.accept()
+    try:
+        while True:
+            data = await ws.receive_json()
+            raw_list = data.get("lecturas", [data] if isinstance(data, dict) else [])
+            lecturas = [LecturaTelemetriaIn(**item) for item in raw_list]
+            with SessionLocal() as db:
+                res = integraciones.procesar_lecturas_gemelo(db, lecturas, usuario="gemelo_ws")
+            await ws.send_json(res.model_dump())
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Conexión WS gemelo cerrada: %s", exc)
+

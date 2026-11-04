@@ -30,8 +30,20 @@ export const Dashboard: React.FC = () => {
   }
 
   // Agrupar mapa de calor por severidad (5 a 1) y frecuencias (A a E)
-  const frecs = ['A', 'B', 'C', 'D', 'E']
-  const sevs = [5, 4, 3, 2, 1]
+  const frecs: Array<{ cod: string; etq: string }> = [
+    { cod: 'A', etq: 'Frecuente' },
+    { cod: 'B', etq: 'Probable' },
+    { cod: 'C', etq: 'Ocasional' },
+    { cod: 'D', etq: 'Raro' },
+    { cod: 'E', etq: 'Improbable' },
+  ]
+  const sevs: Array<{ num: number; etq: string }> = [
+    { num: 5, etq: 'Catastrófico' },
+    { num: 4, etq: 'Mayor' },
+    { num: 3, etq: 'Moderado' },
+    { num: 2, etq: 'Menor' },
+    { num: 1, etq: 'Leve' },
+  ]
 
   const celdaPor = (f: string, s: number) =>
     resumen.mapa_calor.find((c) => c.frecuencia === f && c.severidad === s)
@@ -180,67 +192,91 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <div className="inline-block min-w-full align-middle">
-              <div className="flex">
-                {/* Eje Severidad (Vertical) */}
-                <div className="flex flex-col justify-between py-6 pr-2 text-xs font-semibold text-slate-400 text-right w-24">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">5 - Catastrófico</span>
-                  <span className="text-[11px] text-slate-500">4 - Mayor</span>
-                  <span className="text-[11px] text-slate-500">3 - Moderado</span>
-                  <span className="text-[11px] text-slate-500">2 - Menor</span>
-                  <span className="text-[11px] text-slate-500">1 - Leve</span>
-                </div>
-
-                {/* Grilla 5x5 */}
-                <div className="flex-1">
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {sevs.map((sev) =>
-                      frecs.map((frec) => {
-                        const celda = celdaPor(frec, sev)
-                        if (!celda) return null
-                        const haCambiado = celda.actual !== celda.diseno
+            <table className="w-full border-collapse border border-slate-300 dark:border-slate-700 table-fixed select-none">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-slate-800/90 text-[11px] text-slate-600 dark:text-slate-300">
+                  <th className="w-32 border border-slate-300 dark:border-slate-700 px-2.5 py-2 text-left font-bold uppercase tracking-wider">
+                    Sev. \ Frec.
+                  </th>
+                  {frecs.map((f) => (
+                    <th
+                      key={f.cod}
+                      className="border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-center"
+                    >
+                      <div className="font-bold text-xs text-slate-800 dark:text-slate-100">
+                        {f.cod}
+                      </div>
+                      <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                        {f.etq}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sevs.map((sev) => (
+                  <tr key={sev.num}>
+                    <th className="bg-slate-100 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 px-2.5 py-2 text-right align-middle">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        Nivel {sev.num}
+                      </div>
+                      <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                        {sev.etq}
+                      </div>
+                    </th>
+                    {frecs.map((frec) => {
+                      const celda = celdaPor(frec.cod, sev.num)
+                      if (!celda) {
                         return (
-                          <div
-                            key={`${frec}-${sev}`}
-                            className={`h-16 rounded-md p-1.5 flex flex-col justify-between transition-all ${
-                              NIVEL_CELDA[celda.nivel]
-                            } ${haCambiado ? 'ring-2 ring-red-500/80 shadow-md animate-pulse' : ''}`}
-                          >
+                          <td
+                            key={`${frec.cod}-${sev.num}`}
+                            className="border border-slate-300 dark:border-slate-700 h-16"
+                          />
+                        )
+                      }
+                      const tieneActivos = celda.actual > 0
+                      const haCambiado = celda.actual !== celda.diseno
+                      return (
+                        <td
+                          key={`${frec.cod}-${sev.num}`}
+                          className={`border border-slate-400/60 dark:border-slate-700 h-16 p-0 align-top transition-all ${
+                            NIVEL_CELDA[celda.nivel]
+                          } ${
+                            tieneActivos
+                              ? 'opacity-100 ring-1 ring-inset ring-slate-900/25 dark:ring-white/25 shadow-sm z-10'
+                              : 'opacity-20 saturate-50 hover:opacity-40'
+                          } ${haCambiado ? 'ring-2 ring-inset ring-red-600 dark:ring-red-400 animate-pulse' : ''}`}
+                        >
+                          <div className="h-full w-full px-2 py-1.5 flex flex-col justify-between">
                             <div className="flex justify-between items-start">
-                              <span className="text-[10px] font-bold text-slate-800/80 dark:text-slate-200/90">
-                                {frec}{sev}
+                              <span className="text-[10px] font-bold tracking-tight opacity-85">
+                                {frec.cod}
+                                {sev.num}
                               </span>
                               {haCambiado && (
-                                <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-red-600 text-white">
-                                  {celda.actual > celda.diseno ? `+${celda.actual - celda.diseno}` : `${celda.actual - celda.diseno}`}
+                                <span className="text-[9px] font-extrabold px-1 py-0.2 rounded bg-red-700 text-white shadow-sm">
+                                  {celda.actual > celda.diseno
+                                    ? `+${celda.actual - celda.diseno}`
+                                    : `${celda.actual - celda.diseno}`}
                                 </span>
                               )}
                             </div>
-                            <div className="text-center font-black">
-                              <span className="text-xl text-slate-900 dark:text-slate-900 leading-none">
+                            <div className="text-center font-black pb-0.5">
+                              <span className="text-xl leading-none">
                                 {celda.actual}
                               </span>
-                              <span className="text-[11px] font-normal text-slate-700/80 ml-1">
+                              <span className="text-[11px] font-semibold opacity-75 ml-1">
                                 ({celda.diseno})
                               </span>
                             </div>
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
-
-                  {/* Eje Frecuencia (Horizontal) */}
-                  <div className="grid grid-cols-5 gap-1.5 mt-2 text-center text-xs text-slate-500">
-                    <div><span className="font-bold text-slate-700 dark:text-slate-300">A</span><p className="text-[10px]">Frecuente</p></div>
-                    <div><span className="font-bold text-slate-700 dark:text-slate-300">B</span><p className="text-[10px]">Probable</p></div>
-                    <div><span className="font-bold text-slate-700 dark:text-slate-300">C</span><p className="text-[10px]">Ocasional</p></div>
-                    <div><span className="font-bold text-slate-700 dark:text-slate-300">D</span><p className="text-[10px]">Raro</p></div>
-                    <div><span className="font-bold text-slate-700 dark:text-slate-300">E</span><p className="text-[10px]">Improbable</p></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

@@ -7,13 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.errors import ErrorApi, no_encontrado
-from app.models import Barrera, Escenario, EscenarioBarrera, ResultadoRiesgo
+from app.models import Barrera, Escenario, EscenarioBarrera, FactorEscalamiento, PalabraGuia, ResultadoRiesgo
 from app.schemas import (
     BarreraEscenarioOut,
+    ControlFactorOut,
     EscenarioDetalle,
     EscenarioIn,
     EscenarioOut,
     EscenarioUpdate,
+    FactorEscalamientoOut,
     Pagina,
     ResultadoOut,
     VinculoCrear,
@@ -42,8 +44,14 @@ def listar(
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     filas = db.execute(stmt.order_by(*ORDENES[orden], Escenario.id).offset((page - 1) * size).limit(size)).all()
     conteos = conteo_barreras(db, [f[0].id for f in filas])
-    return {"items": [a_escenario_out(f, conteos.get(f[0].id, 0)) for f in filas],
-            "total": total, "page": page, "size": size}
+    items: list[EscenarioOut] = []
+    for f in filas:
+        esc_id = f[0].id
+        out = a_escenario_out(f, conteos.get(esc_id, 0))
+        out.barreras = _detalle_barreras(db, esc_id)
+        out.factores_escalamiento = _factores_escenario(db, esc_id)
+        items.append(out)
+    return {"items": items, "total": total, "page": page, "size": size}
 
 
 def _fila(db: DbSession, id_: int) -> Any:
@@ -51,6 +59,37 @@ def _fila(db: DbSession, id_: int) -> Any:
     if fila is None:
         raise no_encontrado("Escenario", id_)
     return fila
+
+
+def _factores_escenario(db: DbSession, esc_id: int) -> list[FactorEscalamientoOut]:
+    factores = db.scalars(
+        select(FactorEscalamiento).where(FactorEscalamiento.escenario_id == esc_id)
+    ).all()
+    out: list[FactorEscalamientoOut] = []
+    for f in factores:
+        eb = db.get(EscenarioBarrera, f.escenario_barrera_id)
+        tag = eb.barrera.tag_activo if eb and eb.barrera else "BARRERA"
+        out.append(
+            FactorEscalamientoOut(
+                id=f.id,
+                escenario_id=f.escenario_id,
+                escenario_barrera_id=f.escenario_barrera_id,
+                barrera_tag=tag,
+                descripcion=f.descripcion,
+                categoria=f.categoria,
+                controles=[
+                    ControlFactorOut(
+                        id=c.id,
+                        factor_escalamiento_id=c.factor_escalamiento_id,
+                        descripcion=c.descripcion,
+                        tag_activo=c.tag_activo,
+                        estado_actual=c.estado_actual,
+                    )
+                    for c in f.controles
+                ],
+            )
+        )
+    return out
 
 
 def _detalle_barreras(db: DbSession, esc_id: int) -> list[BarreraEscenarioOut]:
@@ -66,10 +105,11 @@ def _detalle_barreras(db: DbSession, esc_id: int) -> list[BarreraEscenarioOut]:
         b = v.barrera
         d = detallar_barrera(
             BarreraEntrada(b.tag_activo, b.tipo, v.frr_diseno, b.estado_actual, b.vigencia_desde,
-                           b.vigencia_hasta, v.lado), cfg, recalc.hoy())
+                           b.vigencia_hasta, v.lado, b.factor_degradacion), cfg, recalc.hoy())
         out.append(BarreraEscenarioOut(
             barrera_id=b.id, tag_activo=b.tag_activo, descripcion=b.descripcion, tipo=b.tipo,
-            estado_actual=b.estado_actual, lado=v.lado, frr_diseno=v.frr_diseno,
+            estado_actual=b.estado_actual, factor_degradacion=b.factor_degradacion,
+            lado=v.lado, frr_diseno=v.frr_diseno,
             frr_efectivo=d.frr_efectivo, cuenta_en_diseno=d.cuenta_en_diseno, vigente=d.vigente,
             vigencia_desde=b.vigencia_desde, vigencia_hasta=b.vigencia_hasta, moc_ref=b.moc_ref))
     return sorted(out, key=lambda x: (x.lado, x.tag_activo))
@@ -82,7 +122,9 @@ def detalle(id_: int, db: DbSession, _: Usuario_) -> EscenarioDetalle:
     hist = db.scalars(select(ResultadoRiesgo).where(ResultadoRiesgo.escenario_id == id_)
                       .order_by(ResultadoRiesgo.id.desc()).limit(50)).all()
     base = a_escenario_out(fila, len(barreras))
-    return EscenarioDetalle(**base.model_dump(), barreras=barreras,
+    base.barreras = barreras
+    base.factores_escalamiento = _factores_escenario(db, id_)
+    return EscenarioDetalle(**base.model_dump(),
                             historial=[ResultadoOut.model_validate(h) for h in hist])
 
 
@@ -94,13 +136,36 @@ def resultado(id_: int, db: DbSession, u: Usuario_) -> EscenarioDetalle:
 
 @router.post("", response_model=EscenarioOut, status_code=201)
 def crear(datos: EscenarioIn, db: DbSession, p: Admin) -> EscenarioOut:
-    esc = Escenario(**datos.model_dump())
+    pg_id = datos.palabra_guia_id
+    if pg_id is None:
+        if not datos.nodo_id or not datos.palabra_guia:
+            raise ErrorApi(422, "DATOS_INVALIDOS", "Se requiere palabra_guia_id o (nodo_id y palabra_guia)")
+        pg_existente = db.scalars(
+            select(PalabraGuia).where(
+                PalabraGuia.nodo_id == datos.nodo_id,
+                PalabraGuia.nombre == datos.palabra_guia.strip(),
+            )
+        ).first()
+        if pg_existente:
+            pg_id = pg_existente.id
+        else:
+            nueva_pg = PalabraGuia(nodo_id=datos.nodo_id, nombre=datos.palabra_guia.strip())
+            db.add(nueva_pg)
+            db.flush()
+            pg_id = nueva_pg.id
+
+    payload = datos.model_dump(exclude={"nodo_id", "palabra_guia"})
+    payload["palabra_guia_id"] = pg_id
+    esc = Escenario(**payload)
     db.add(esc)
     db.flush()
-    registrar(db, p.username, "CREAR_ESCENARIO", "escenario", esc.id, despues=datos.model_dump())
+    registrar(db, p.username, "CREAR_ESCENARIO", "escenario", esc.id, despues=payload)
     recalc.recalcular(db, [esc.id], "Alta de escenario", p.username, auditar=False)
     db.commit()
-    return a_escenario_out(_fila(db, esc.id))
+    out = a_escenario_out(_fila(db, esc.id))
+    out.barreras = _detalle_barreras(db, esc.id)
+    out.factores_escalamiento = _factores_escenario(db, esc.id)
+    return out
 
 
 @router.put("/{id_}", response_model=EscenarioOut)

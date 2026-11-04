@@ -264,3 +264,29 @@ def test_xlsx_roundtrip_lectura():
     filas = importer.leer_tabla(importer.plantilla_xlsx(), "a.xlsx")
     assert filas[0]["palabra_guia"] == "Más temperatura" and filas[1]["tipo"] == "TEMPORAL"
     assert io.BytesIO(importer.plantilla_xlsx()).getbuffer().nbytes > 0
+
+
+def test_gemelo_digital_vinculos_y_telemetria_ws(client, admin):
+    vinculos = client.get("/integraciones/gemelo/vinculos", headers=admin).json()
+    assert len(vinculos) >= 5
+    primer_tag = vinculos[0]["tag_gemelo"]
+
+    # Enviar telemetría por REST al Gemelo Digital
+    res = client.post(
+        "/integraciones/gemelo/telemetria",
+        headers=admin,
+        json={"lecturas": [{"tag_gemelo": primer_tag, "valor": 95.0, "estado_manual": "DEGRADADO", "factor_degradacion": 70}]},
+    )
+    assert res.status_code == 200
+    assert res.json()["barreras_actualizadas"] == 1
+
+    # Probar canales WebSocket (/ws/eventos y /ws/gemelo)
+    with client.websocket_connect("/ws/eventos") as ws_ev:
+        saludo = ws_ev.receive_json()
+        assert saludo["tipo"] == "CONEXION_ESTABLECIDA"
+
+    with client.websocket_connect("/ws/gemelo") as ws_gd:
+        ws_gd.send_json({"lecturas": [{"tag_gemelo": primer_tag, "valor": 0.0, "estado_manual": "DISPONIBLE"}]})
+        resp = ws_gd.receive_json()
+        assert resp["barreras_actualizadas"] == 1
+

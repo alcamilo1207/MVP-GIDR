@@ -20,7 +20,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gidr}:${POSTGRES_PASSWORD:-gidr}@db:5432/${POSTGRES_DB:-gidr}
       JWT_SECRET: ${JWT_SECRET:-cambiar-este-secreto-en-produccion-0123456789}
       AUTO_SEED: ${AUTO_SEED:-true}
-      CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:3000,http://localhost:5173}
+      CORS_ORIGENES: ${CORS_ORIGENES:-http://localhost:3000,http://localhost:5173,http://localhost:5174}
     depends_on:
       db:
         condition: service_healthy

@@ -1,0 +1,66 @@
+# Render Blueprint: GIDR + Gemelo Digital
+# Despliegue automático de Backend (Web Service) + 2 Frontends (Static Sites)
+# Documentación: https://render.com/docs/blueprint-spec
+
+services:
+  # ============================================================================
+  # 1. BACKEND GIDR API & WEBSOCKETS (Web Service en Python 3.12)
+  # ============================================================================
+  - type: web
+    name: gidr-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install -e ."
+    startCommand: "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./gidr.db
+      - key: AUTO_SEED
+        value: "true"
+      - key: CORS_ORIGENES
+        value: "*"
+      - key: JWT_SECRET
+        generateValue: true
+
+  # ============================================================================
+  # 2. FRONTEND GIDR (Sitio Estático React / Vite)
+  # ============================================================================
+  - type: web
+    name: gidr-frontend
+    env: static
+    region: oregon
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: gidr-backend
+          property: host
+
+  # ============================================================================
+  # 3. GEMELO DIGITAL HORNO H-101 (Sitio Estático React / Vite)
+  # ============================================================================
+  - type: web
+    name: gemelo-digital-horno
+    env: static
+    region: oregon
+    rootDir: gemelo-digital-horno
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_GIDR_WS_URL
+        value: wss://gidr-backend.onrender.com/ws/gemelo
+      - key: VITE_GIDR_APP_URL
+        value: https://gidr-frontend.onrender.com

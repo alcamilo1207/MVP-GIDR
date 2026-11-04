@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Base, Empresa, Usuario
+from app.models import Base, Empresa, Nodo, Usuario
 from app.security import hash_password
 from app.services import importer, recalc
 
@@ -23,6 +23,64 @@ EMPRESA = "PETROQUÍMICA DEMO S.A. (FICTICIA)"
 SITE = "Refinería Demo (ficticia)"
 CDU = "Destilación atmosférica CDU-100"
 HDT = "Hidrotratamiento HDT-200"
+
+# Metadatos técnicos de los nodos reales de la planta para la hoja de Nodos
+NODOS_META: dict[str, dict[str, object]] = {
+    "Horno H-101": {
+        "descripcion": "Calentamiento de crudo desalado mediante serpentines radiantes y convectivos antes de ingresar a la zona flash de la columna atmosférica T-101.",
+        "condiciones_diseno": "MAWP = 350 psig @ 750 °F (Serpentín de crudo)\nMAWP = 75 psig @ 150 °F (Cabezal de gas combustible)",
+        "condiciones_operacion": "210 psig @ 685 °F (Salida de crudo COT)\n35 psig @ 90 °F (Gas combustible a quemadores)",
+        "color": "#ef4444",
+        "sesion": "Sesión 1 — CDU-100 (12/03/2026)",
+        "planos": ["P&ID-CDU-100-01 H. 1 de 4", "P&ID-CDU-100-02 H. 2 de 4"],
+        "comentarios": "Equipo crítico con monitoreo de telemetría en vivo (TI-101, FI-101, PI-102). Incluye BMS y lazos SIS SIL-2/SIL-3.",
+    },
+    "Columna T-101": {
+        "descripcion": "Fraccionamiento atmosférico del crudo precalentado en cortes de gas húmedo, nafta liviana/pesada, queroseno, diésel atmosférico y crudo reducido de fondo.",
+        "condiciones_diseno": "MAWP = 65 psig @ 700 °F (Cuerpo de columna)\nMAWP = 75 psig @ 250 °F (Acumulador de tope V-101)",
+        "condiciones_operacion": "18 psig @ 660 °F (Zona flash / fondo)\n12 psig @ 245 °F (Domo de columna)",
+        "color": "#3b82f6",
+        "sesion": "Sesión 1 — CDU-100 (12/03/2026)",
+        "planos": ["P&ID-CDU-100-03 H. 3 de 4", "P&ID-CDU-100-04 H. 4 de 4"],
+        "comentarios": "Alivio principal mediante PSV-101 descargando al cabezal de antorcha de alta presión.",
+    },
+    "Desalador D-101": {
+        "descripcion": "Remoción electrostática de sales inorgánicas, agua emulsionada y sólidos suspendidos del crudo fresco mediante inyección de agua de lavado.",
+        "condiciones_diseno": "MAWP = 285 psig @ 350 °F (Tambor electrostático D-101)",
+        "condiciones_operacion": "195 psig @ 265 °F (Operación normal con interfase agua/crudo controlada)",
+        "color": "#10b981",
+        "sesion": "Sesión 2 — CDU-100 (13/03/2026)",
+        "planos": ["P&ID-CDU-100-01 H. 1 de 4"],
+        "comentarios": "Control de corrosión aguas abajo dependiente de la eficiencia de desalado (>95%).",
+    },
+    "Reactor R-201": {
+        "descripcion": "Hidrodesulfuración y saturación catalítica de olefinas/aromáticos en lecho fijo a alta presión parcial de hidrógeno con inyección de quench entre camas.",
+        "condiciones_diseno": "MAWP = 1250 psig @ 800 °F (Reactor de pared gruesa Cr-Mo)",
+        "condiciones_operacion": "980 psig @ 690 °F (Lecho catalítico 1 y 2 con quench de H2)",
+        "color": "#a855f7",
+        "sesion": "Sesión 3 — HDT-200 (18/03/2026)",
+        "planos": ["P&ID-HDT-200-01 H. 1 de 3", "P&ID-HDT-200-02 H. 2 de 3"],
+        "comentarios": "Reacción altamente exotérmica. Cuenta con enclavamiento de despresurización de emergencia (SIS-R201-TSHH).",
+    },
+    "Compresor K-201": {
+        "descripcion": "Compresión y recirculación de gas rico en hidrógeno desde el separador de alta presión hacia el circuito de carga del reactor R-201.",
+        "condiciones_diseno": "MAWP = 650 psig @ 200 °F (Succión)\nMAWP = 1350 psig @ 320 °F (Descarga)",
+        "condiciones_operacion": "580 psig @ 110 °F (Succión)\n1120 psig @ 235 °F (Descarga compresor reciprocante)",
+        "color": "#f59e0b",
+        "sesion": "Sesión 3 — HDT-200 (18/03/2026)",
+        "planos": ["P&ID-HDT-200-02 H. 2 de 3"],
+        "comentarios": "Servicio de hidrógeno a alta presión; caseta equipada con detectores catalíticos/ultrasónicos DG-K201.",
+    },
+    "Separador V-202": {
+        "descripcion": "Separación trifásica gas-líquido a alta presión del efluente enfriado del reactor R-201 para recuperar hidrógeno de reciclo y enviar hidrocarburo líquido al fraccionador.",
+        "condiciones_diseno": "MAWP = 1150 psig @ 250 °F (Separador de alta presión V-202)\nMAWP = 250 psig @ 250 °F (Sistema de baja presión aguas abajo)",
+        "condiciones_operacion": "920 psig @ 120 °F (Separador V-202)\n140 psig @ 115 °F (Despojador aguas abajo)",
+        "color": "#14b8a6",
+        "sesion": "Sesión 4 — HDT-200 (19/03/2026)",
+        "planos": ["P&ID-HDT-200-02 H. 2 de 3", "P&ID-HDT-200-03 H. 3 de 3"],
+        "comentarios": "Riesgo crítico de gas blowby (paso de alta a baja presión) mitigado por SIS-V202-LSLL (SIL-2).",
+    },
+}
 
 # Barreras: tag -> descripción
 BARRERAS: dict[str, str] = {
@@ -166,6 +224,24 @@ def filas_hazop(hoy: date | None = None) -> list[dict[str, str]]:
     return filas
 
 
+def poblar_metadatos_nodos(db: Session) -> int:
+    actualizados = 0
+    for n in db.scalars(select(Nodo)).all():
+        meta = NODOS_META.get(n.nombre)
+        if meta and not n.condiciones_diseno:
+            n.descripcion = str(meta["descripcion"])
+            n.condiciones_diseno = str(meta["condiciones_diseno"])
+            n.condiciones_operacion = str(meta["condiciones_operacion"])
+            n.color = str(meta["color"])
+            n.sesion = str(meta["sesion"])
+            n.planos = list(meta["planos"])  # type: ignore[arg-type]
+            n.comentarios = str(meta["comentarios"])
+            actualizados += 1
+    if actualizados:
+        db.commit()
+    return actualizados
+
+
 def sembrar(db: Session, reset: bool = False) -> str:
     if reset:
         for t in reversed(Base.metadata.sorted_tables):
@@ -176,10 +252,12 @@ def sembrar(db: Session, reset: bool = False) -> str:
             db.add(Usuario(username=username, password_hash=hash_password(pw), rol=rol))
     db.commit()
     if db.scalars(select(Empresa)).first() is not None:
+        poblar_metadatos_nodos(db)
         return "La base ya tiene datos; seed omitido (use --reset para recargar)."
     res = importer.importar_hazop(db, filas_hazop(), usuario="seed", fuente="SEED",
                                  ts_base=recalc.ahora() - timedelta(days=30))
     db.commit()
+    poblar_metadatos_nodos(db)
     if res.errores:
         raise RuntimeError(f"Errores en seed: {res.errores}")
     return (f"Seed OK: {res.escenarios_creados} escenarios, {res.barreras_creadas} barreras, "

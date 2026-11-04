@@ -133,3 +133,14 @@ def test_matriz_personalizada():
 def test_temporal_sin_limites_es_vigente():
     t = barrera("T1", 100, tipo="TEMPORAL")
     assert core.temporal_vigente(t, HOY)
+
+
+def test_factor_degradacion_y_riesgo_por_impacto():
+    b_deg50 = barrera("B1", 100, "DEGRADADO", factor_degradacion=50)
+    r = evaluar("B", [b_deg50], imp=Impactos(economico=5, personas=3, ambiente=2, reputacion=1))
+    assert r.frr_actual_total == pytest.approx(50.0)
+    assert r.frecuencia_actual == "C"  # B (idx 1) + floor(log10(50))=1 -> C (idx 2)
+    assert r.riesgo_actual_economico == "Extremo"  # (5-2)*5 = 15
+    assert r.riesgo_actual_personas == "Medio"     # (5-2)*3 = 9
+    assert r.riesgo_actual_ambiente == "Medio"     # (5-2)*2 = 6
+    assert r.riesgo_actual_reputacion == "Bajo"    # (5-2)*1 = 3

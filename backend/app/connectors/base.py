@@ -22,6 +22,7 @@ class EventoEstado:
     fuente: str
     fecha: datetime
     detalle: dict[str, Any] = field(default_factory=dict)
+    factor_degradacion: int | None = None
 
 
 @dataclass

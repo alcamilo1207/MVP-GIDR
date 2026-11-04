@@ -13,6 +13,7 @@ from app.connectors.base import EventoEstado
 from app.models import Barrera, EstadoBarreraHist
 from app.services import recalc
 from app.services.audit import registrar
+from app.services.realtime import gestor_ws
 
 
 @dataclass
@@ -69,21 +70,40 @@ def aplicar_eventos(
         ultimo = barrera.estado_actualizado
         if ultimo is None or ts >= _utc(ultimo):
             anterior = barrera.estado_actual
+            deg_anterior = barrera.factor_degradacion
             barrera.estado_actual = ev.estado
+            if ev.factor_degradacion is not None:
+                barrera.factor_degradacion = max(1, min(100, int(ev.factor_degradacion)))
             barrera.estado_actualizado = ts
-            if anterior != ev.estado:
+            cambio_deg = ev.factor_degradacion is not None and deg_anterior != barrera.factor_degradacion
+            if anterior != ev.estado or cambio_deg:
                 ids = recalc.escenarios_de_barrera(db, barrera.id)
                 afectados.update(ids)
                 res.cambios_estado.append(CambioEstado(barrera.tag_activo, anterior, ev.estado, len(ids)))
                 registrar(
                     db, usuario, "CAMBIO_ESTADO_BARRERA", "barrera", barrera.id,
-                    antes={"estado": anterior}, despues={"estado": ev.estado, "fuente": ev.fuente, "detalle": ev.detalle},
+                    antes={"estado": anterior, "factor_degradacion": deg_anterior},
+                    despues={
+                        "estado": ev.estado,
+                        "factor_degradacion": barrera.factor_degradacion,
+                        "fuente": ev.fuente,
+                        "detalle": ev.detalle,
+                    },
                 )
         db.flush()
     res.no_mapeados = list(no_map)
     if afectados:
-        rr = recalc.recalcular(db, afectados, "Cambio de estado de barrera", usuario)
+        rr = recalc.recalcular(db, afectados, "Cambio de estado de barrera (Gemelo Digital / Planta)", usuario)
         res.escenarios_recalculados = rr.escenarios
+        gestor_ws.difundir(
+            {
+                "tipo": "ACTUALIZACION_PLANTA",
+                "ts": recalc.ahora().isoformat(),
+                "cambios": [c.__dict__ for c in res.cambios_estado],
+                "escenarios_recalculados": res.escenarios_recalculados,
+                "escenarios_ids": sorted(afectados),
+            }
+        )
     registrar(
         db, usuario, "INGESTA_CMMS", "barrera",
         despues={"recibidos": res.recibidos, "aceptados": res.aceptados, "no_mapeados": res.no_mapeados,

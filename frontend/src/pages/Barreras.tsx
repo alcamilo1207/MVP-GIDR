@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import type { Barrera, CambioEstadoOut, Historial, Pagina } from '../lib/types'
-import { ESTADOS, ESTADO_CLASES, ESTADO_ETIQUETA, fmtBrecha, fmtFecha } from '../lib/format'
+import type { Barrera, Historial, Pagina } from '../lib/types'
+import { ESTADOS, ESTADO_CLASES, ESTADO_ETIQUETA, fmtFecha } from '../lib/format'
 
 export const Barreras: React.FC = () => {
   const queryClient = useQueryClient()
@@ -11,11 +10,6 @@ export const Barreras: React.FC = () => {
   const [tipoFiltro, setTipoFiltro] = useState<string>('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-
-  // Estados del modal de Simulación
-  const [barreraSimulando, setBarreraSimulando] = useState<Barrera | null>(null)
-  const [nuevoEstadoSim, setNuevoEstadoSim] = useState<string>('FUERA_DE_SERVICIO')
-  const [resultadoSim, setResultadoSim] = useState<CambioEstadoOut | null>(null)
 
   // Estados del modal de Historial
   const [barreraHistorial, setBarreraHistorial] = useState<Barrera | null>(null)
@@ -47,24 +41,6 @@ export const Barreras: React.FC = () => {
     enabled: !!barreraHistorial,
   })
 
-  // Mutación para Simular (dry-run) o Aplicar
-  const mutacionEstado = useMutation({
-    mutationFn: ({ id, estado, aplicar }: { id: number; estado: string; aplicar: boolean }) =>
-      api.post<CambioEstadoOut>(`/barreras/${id}/estado`, {
-        estado,
-        aplicar,
-        fuente: 'UI_SIMULADOR',
-      }),
-    onSuccess: (data, vars) => {
-      setResultadoSim(data)
-      if (vars.aplicar) {
-        queryClient.invalidateQueries({ queryKey: ['barreras'] })
-        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-        queryClient.invalidateQueries({ queryKey: ['escenarios'] })
-      }
-    },
-  })
-
   // Mutación para Crear Barrera Temporal (medida compensatoria)
   const mutacionCrearTemporal = useMutation({
     mutationFn: () =>
@@ -92,7 +68,7 @@ export const Barreras: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Inventario y Salud de Barreras</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Supervisa el estado operacional, simula contingencias y gestiona barreras temporales con control MOC.
+            Supervisa el estado operacional en tiempo real y gestiona barreras temporales con control MOC.
           </p>
         </div>
 
@@ -159,7 +135,7 @@ export const Barreras: React.FC = () => {
                 <th className="text-center">Estado Operacional</th>
                 <th>Última Actualización</th>
                 <th className="text-center">Escenarios Dependientes</th>
-                <th className="text-center">Simulación / Acciones</th>
+                <th className="text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -207,19 +183,7 @@ export const Barreras: React.FC = () => {
                         {b.n_escenarios} escenario(s)
                       </span>
                     </td>
-                    <td className="text-center space-x-1.5 whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          setBarreraSimulando(b)
-                          setNuevoEstadoSim(b.estado_actual === 'DISPONIBLE' ? 'FUERA_DE_SERVICIO' : 'DISPONIBLE')
-                          setResultadoSim(null)
-                        }}
-                        className="btn-primary text-xs px-2.5 py-1 bg-amber-600 hover:bg-amber-700"
-                        title="Simular cambio de estado en vivo"
-                      >
-                        ⚡ Simular Evento
-                      </button>
-
+                    <td className="text-center whitespace-nowrap">
                       <button
                         onClick={() => setBarreraHistorial(b)}
                         className="btn-secondary text-xs px-2.5 py-1"
@@ -236,126 +200,7 @@ export const Barreras: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal 1: SIMULAR EVENTO (PIEZA CENTRAL DE LA DEMO) */}
-      {barreraSimulando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start pb-3 border-b border-slate-200 dark:border-slate-800">
-              <div>
-                <span className="text-xs font-bold text-amber-600 tracking-wider uppercase">Simulador de Contingencias</span>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Barrera: {barreraSimulando.tag_activo}
-                </h3>
-                <p className="text-xs text-slate-500">{barreraSimulando.descripcion}</p>
-              </div>
-              <button
-                onClick={() => setBarreraSimulando(null)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg">
-              <div>
-                <span className="text-slate-500">Estado Actual:</span>
-                <div className="font-bold text-sm mt-0.5">{ESTADO_ETIQUETA[barreraSimulando.estado_actual]}</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Nuevo Estado a Probar:</span>
-                <select
-                  className="input text-xs mt-1"
-                  value={nuevoEstadoSim}
-                  onChange={(e) => setNuevoEstadoSim(e.target.value)}
-                >
-                  {ESTADOS.map((e) => (
-                    <option key={e} value={e}>{ESTADO_ETIQUETA[e]}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() =>
-                  mutacionEstado.mutate({
-                    id: barreraSimulando.id,
-                    estado: nuevoEstadoSim,
-                    aplicar: false,
-                  })
-                }
-                disabled={mutacionEstado.isPending}
-                className="btn-secondary text-xs flex-1 py-2"
-              >
-                🔍 Calcular Impacto (Dry-Run)
-              </button>
-              <button
-                onClick={() =>
-                  mutacionEstado.mutate({
-                    id: barreraSimulando.id,
-                    estado: nuevoEstadoSim,
-                    aplicar: true,
-                  })
-                }
-                disabled={mutacionEstado.isPending}
-                className="btn-danger text-xs flex-1 py-2 font-bold"
-              >
-                ⚠️ Aplicar Cambio Real
-              </button>
-            </div>
-
-            {/* Resultado de la Simulación */}
-            {resultadoSim && (
-              <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Impacto en los {resultadoSim.impacto.length} escenarios dependientes:
-                  </span>
-                  {resultadoSim.aplicado ? (
-                    <span className="chip bg-red-600 text-white text-[10px]">Cambio Aplicado al Sistema</span>
-                  ) : (
-                    <span className="chip bg-amber-500 text-white text-[10px]">Modo Simulación (Sin persistir)</span>
-                  )}
-                </div>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto">
-                  {resultadoSim.impacto.map((imp) => (
-                    <div
-                      key={imp.escenario_id}
-                      className="p-2.5 rounded border border-slate-200 dark:border-slate-800 text-xs bg-white dark:bg-slate-900 flex items-center justify-between"
-                    >
-                      <div className="max-w-md">
-                        <div className="font-semibold text-slate-800 dark:text-slate-200">
-                          Escenario #{imp.escenario_id} · {imp.causa}
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Riesgo: {imp.antes?.riesgo_actual || '—'} ➔ <strong className="text-red-600">{imp.despues.riesgo_actual}</strong>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className={`chip text-xs font-black ${imp.despues.brecha > 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                          Brecha {fmtBrecha(imp.despues.brecha)}
-                        </span>
-                        <div className="mt-1">
-                          <Link
-                            to={`/bowtie/${imp.escenario_id}`}
-                            className="text-[11px] text-brand-600 hover:underline"
-                            onClick={() => setBarreraSimulando(null)}
-                          >
-                            Ver BowTie ➔
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal 2: HISTORIAL DE BARRERA */}
+      {/* Modal: HISTORIAL DE BARRERA */}
       {barreraHistorial && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-xl w-full p-6 space-y-4 max-h-[85vh] flex flex-col">

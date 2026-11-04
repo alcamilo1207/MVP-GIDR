@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from app.domain.engine.core import ConfigMotor, indice_frecuencia, nivel_matriz
 from app.models import (
     Empresa,
     Escenario,
@@ -17,7 +18,9 @@ from app.models import (
     Site,
     Unidad,
 )
-from app.schemas import EscenarioOut, ResultadoOut
+from app.schemas import EscenarioOut, ResultadoOut, RiesgosPorImpactoOut
+
+_CFG_DEFECTO = ConfigMotor()
 
 
 def _latest_ids() -> Any:
@@ -66,6 +69,23 @@ def a_escenario_out(
     fila: Any, n_barreras: int = 0
 ) -> EscenarioOut:
     esc, res, pg, nodo, uni, site, emp = fila
+    riesgo_diseno_imp = None
+    riesgo_actual_imp = None
+    if res is not None:
+        idx_dis = indice_frecuencia(res.frecuencia_diseno_resid)
+        idx_act = indice_frecuencia(res.frecuencia_actual)
+        riesgo_diseno_imp = RiesgosPorImpactoOut(
+            economico=nivel_matriz(_CFG_DEFECTO, idx_dis, esc.imp_economico),
+            personas=nivel_matriz(_CFG_DEFECTO, idx_dis, esc.imp_personas),
+            ambiente=nivel_matriz(_CFG_DEFECTO, idx_dis, esc.imp_ambiente),
+            reputacion=nivel_matriz(_CFG_DEFECTO, idx_dis, esc.imp_reputacion),
+        )
+        riesgo_actual_imp = RiesgosPorImpactoOut(
+            economico=nivel_matriz(_CFG_DEFECTO, idx_act, esc.imp_economico),
+            personas=nivel_matriz(_CFG_DEFECTO, idx_act, esc.imp_personas),
+            ambiente=nivel_matriz(_CFG_DEFECTO, idx_act, esc.imp_ambiente),
+            reputacion=nivel_matriz(_CFG_DEFECTO, idx_act, esc.imp_reputacion),
+        )
     return EscenarioOut(
         id=esc.id,
         empresa=emp.nombre,
@@ -78,8 +98,8 @@ def a_escenario_out(
         palabra_guia_id=pg.id,
         palabra_guia=pg.nombre,
         causa=esc.causa,
-        peligro=esc.peligro,
-        evento_tope=esc.evento_tope,
+        peligro=esc.peligro or f"Peligro inherente en {nodo.nombre}: Presencia de fluidos y energía de proceso",
+        evento_tope=esc.evento_tope or f"{pg.nombre} en {nodo.nombre} (Pérdida de contención)",
         frecuencia_diseno=esc.frecuencia_diseno,
         consecuencia=esc.consecuencia,
         imp_economico=esc.imp_economico,
@@ -89,6 +109,8 @@ def a_escenario_out(
         version=esc.version,
         n_barreras=n_barreras,
         resultado=ResultadoOut.model_validate(res) if res is not None else None,
+        riesgo_diseno_imp=riesgo_diseno_imp,
+        riesgo_actual_imp=riesgo_actual_imp,
     )
 
 
