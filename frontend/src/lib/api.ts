@@ -1,4 +1,13 @@
-function resolverBaseApi(): string {
+export function resolverBaseApi(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('gidr_api_url')
+    if (custom && custom.trim()) {
+      let c = custom.trim().replace(/\/+$/, '')
+      if (!c.startsWith('http://') && !c.startsWith('https://')) c = `https://${c}`
+      return c
+    }
+  }
+
   let raw = (import.meta as unknown as { env?: { VITE_API_URL?: string; DEV?: boolean } }).env?.VITE_API_URL
   if (raw && raw.trim()) {
     raw = raw.trim().replace(/\/+$/, '')
@@ -19,6 +28,15 @@ function resolverBaseApi(): string {
   }
 
   return '/api'
+}
+
+export function guardarBaseApi(url: string) {
+  if (!url || !url.trim()) localStorage.removeItem('gidr_api_url')
+  else {
+    let u = url.trim().replace(/\/+$/, '')
+    if (!u.startsWith('http://') && !u.startsWith('https://')) u = `https://${u}`
+    localStorage.setItem('gidr_api_url', u)
+  }
 }
 
 export const BASE = resolverBaseApi()
@@ -64,7 +82,8 @@ async function request<T>(method: string, path: string, body?: unknown, params?:
     headers['Content-Type'] = 'application/json'
     payload = JSON.stringify(body)
   }
-  const res = await fetch(`${BASE}${path}${qs(params)}`, { method, headers, body: payload })
+  const base = resolverBaseApi()
+  const res = await fetch(`${base}${path}${qs(params)}`, { method, headers, body: payload })
   if (res.status === 204) return undefined as T
   const texto = await res.text()
   let data: unknown

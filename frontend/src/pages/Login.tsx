@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { api } from '../lib/api'
+import { api, guardarBaseApi, resolverBaseApi } from '../lib/api'
 import type { Rol } from '../lib/types'
 
 interface LoginResponse {
@@ -16,6 +16,8 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
+  const [mostrarConfigApi, setMostrarConfigApi] = useState(false)
+  const [urlApiPersonalizada, setUrlApiPersonalizada] = useState(() => resolverBaseApi())
   const { iniciarSesion } = useAuth()
   const navigate = useNavigate()
 
@@ -32,7 +34,20 @@ export const Login: React.FC = () => {
       navigate('/')
     } catch (err) {
       const errorObj = err as Error
-      setError(errorObj.message || 'Error al iniciar sesión')
+      const baseActual = resolverBaseApi()
+      const esFalloRed =
+        errorObj.message === 'Load failed' ||
+        errorObj.message.toLowerCase().includes('failed to fetch') ||
+        errorObj.message.includes('RESPUESTA_NO_JSON')
+
+      if (esFalloRed) {
+        setError(
+          `No se pudo conectar con el servidor backend (${baseActual}). Si el servicio en Render es gratuito, tarda ~50 segundos en despertar tras inactividad. También puedes verificar que el backend esté "Live" en Render o ajustar la URL abajo.`
+        )
+        setMostrarConfigApi(true)
+      } else {
+        setError(errorObj.message || 'Error al iniciar sesión')
+      }
     } finally {
       setCargando(false)
     }
@@ -114,6 +129,57 @@ export const Login: React.FC = () => {
               <div className="text-[11px] text-slate-500">Clave: lector123 (Solo lectura)</div>
             </button>
           </div>
+        </div>
+
+        {/* Configuración de URL del Backend */}
+        <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
+          <div className="flex items-center justify-between">
+            <span className="truncate mr-2">
+              API Backend: <code className="font-mono text-sky-600 dark:text-sky-400 font-semibold">{resolverBaseApi()}</code>
+            </span>
+            <button
+              type="button"
+              onClick={() => setMostrarConfigApi((v) => !v)}
+              className="text-brand-600 dark:text-brand-400 hover:underline font-semibold shrink-0"
+            >
+              {mostrarConfigApi ? 'Ocultar' : '⚙ Cambiar'}
+            </button>
+          </div>
+
+          {mostrarConfigApi && (
+            <div className="mt-3 space-y-2.5 p-3 bg-slate-50 dark:bg-slate-950/70 rounded-lg border border-slate-200 dark:border-slate-800">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                Dirección URL del backend en Render:
+              </label>
+              <input
+                type="text"
+                value={urlApiPersonalizada}
+                onChange={(e) => setUrlApiPersonalizada(e.target.value)}
+                placeholder="https://gidr-backend.onrender.com"
+                className="input text-xs font-mono w-full"
+              />
+              <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
+                <a
+                  href={`${urlApiPersonalizada}/docs`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sky-600 dark:text-sky-400 hover:underline text-[11px] font-semibold"
+                >
+                  Probar en nueva pestaña (/docs) ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    guardarBaseApi(urlApiPersonalizada)
+                    setError(null)
+                  }}
+                  className="btn-primary text-xs py-1 px-3"
+                >
+                  Guardar y Reintentar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
