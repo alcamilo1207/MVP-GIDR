@@ -30,7 +30,6 @@ services:
   - type: web
     name: gidr-frontend
     env: static
-    region: oregon
     rootDir: frontend
     buildCommand: "npm install && npm run build"
     staticPublishPath: dist
@@ -51,7 +50,6 @@ services:
   - type: web
     name: gemelo-digital-horno
     env: static
-    region: oregon
     rootDir: gemelo-digital-horno
     buildCommand: "npm install && npm run build"
     staticPublishPath: dist
