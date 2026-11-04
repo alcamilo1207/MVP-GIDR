@@ -1,7 +1,27 @@
-const rawApiUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string; DEV?: boolean } }).env?.VITE_API_URL
-const BASE = rawApiUrl
-  ? rawApiUrl.replace(/\/+$/, '')
-  : ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV ? 'http://localhost:8000' : '/api')
+function resolverBaseApi(): string {
+  let raw = (import.meta as unknown as { env?: { VITE_API_URL?: string; DEV?: boolean } }).env?.VITE_API_URL
+  if (raw && raw.trim()) {
+    raw = raw.trim().replace(/\/+$/, '')
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      return `https://${raw}`
+    }
+    return raw
+  }
+
+  const isDev = Boolean((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV)
+  if (isDev) return 'http://localhost:8000'
+
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    const backendHost = window.location.hostname
+      .replace('gidr-frontend', 'gidr-backend')
+      .replace('gidr', 'gidr-backend')
+    return `https://${backendHost}`
+  }
+
+  return '/api'
+}
+
+export const BASE = resolverBaseApi()
 const KEY = 'gidr_token'
 
 export const tokenStore = {
@@ -47,9 +67,20 @@ async function request<T>(method: string, path: string, body?: unknown, params?:
   const res = await fetch(`${BASE}${path}${qs(params)}`, { method, headers, body: payload })
   if (res.status === 204) return undefined as T
   const texto = await res.text()
-  const data = texto ? JSON.parse(texto) : undefined
+  let data: unknown
+  if (texto) {
+    try {
+      data = JSON.parse(texto)
+    } catch {
+      throw new ApiError(
+        res.status,
+        'RESPUESTA_NO_JSON',
+        `El backend respondió en formato no-JSON (${res.status} ${res.statusText}). Verifica que el backend esté activo en ${BASE}.`
+      )
+    }
+  }
   if (!res.ok) {
-    const e = data?.error
+    const e = (data as { error?: { codigo?: string; mensaje?: string; detalle?: unknown } } | undefined)?.error
     if (res.status === 401 && path !== '/auth/login') {
       tokenStore.clear()
       window.dispatchEvent(new Event('gidr:sesion-expirada'))

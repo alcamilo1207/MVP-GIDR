@@ -25,6 +25,9 @@ export const Login: React.FC = () => {
     setCargando(true)
     try {
       const res = await api.post<LoginResponse>('/auth/login', { username, password })
+      if (!res || !res.access_token) {
+        throw new Error('Respuesta inesperada del servidor: no se recibió el token de acceso.')
+      }
       iniciarSesion(res.access_token, { username: res.username, rol: res.rol })
       navigate('/')
     } catch (err) {
