@@ -66,8 +66,17 @@ export const Layout: React.FC = () => {
   const queryClient = useQueryClient()
 
   const [wsConectado, setWsConectado] = useState(false)
+  const [panelAbierto, setPanelAbierto] = useState(false)
   const [notificaciones, setNotificaciones] = useState<NotificacionTicker[]>(NOTIFICACIONES_INICIALES)
   const ultimoEstadoRef = useRef<Record<string, string>>({})
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPanelAbierto(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => {
     let ws: WebSocket | null = null
@@ -229,27 +238,34 @@ export const Layout: React.FC = () => {
                 Nodos
               </NavLink>
               <NavLink to="/escenarios" className={navClass}>
-                Escenarios PHA
+                Escenarios
               </NavLink>
-              <NavLink to="/lopa" className={navClass}>
-                LOPA
+              <NavLink to="/recomendaciones" className={navClass}>
+                Recomendaciones
               </NavLink>
-              <NavLink to="/barreras" className={navClass}>
-                Barreras
-              </NavLink>
-              <NavLink to="/integraciones" className={navClass}>
-                Integraciones
-              </NavLink>
-              <NavLink to="/indicadores" className={navClass}>
-                API 754
-              </NavLink>
-              <NavLink to="/auditoria" className={navClass}>
-                Auditoría
-              </NavLink>
+              <button
+                type="button"
+                onClick={() => setPanelAbierto(true)}
+                className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-300 dark:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-2xs"
+                title="Abrir panel con LOPA, Barreras, Integraciones, API 754 y Auditoría"
+              >
+                <span className="text-sm">☰</span>
+                <span>Más módulos</span>
+              </button>
             </nav>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Botón menú móvil para abrir panel retráctil */}
+            <button
+              type="button"
+              onClick={() => setPanelAbierto(true)}
+              className="md:hidden p-2 rounded-md border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold flex items-center gap-1"
+              title="Abrir menú"
+            >
+              <span>☰</span>
+              <span>Menú</span>
+            </button>
             {/* Indicador de Canal WebSocket en Tiempo Real de Telemetría */}
             <Link
               to="/integraciones"
@@ -427,6 +443,189 @@ export const Layout: React.FC = () => {
       <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 py-4 text-center text-xs text-slate-500 dark:text-slate-400">
         GIDR Módulo 4 · HUB de integración de riesgo dinámico (MVP) · Petroquímica Demo S.A.
       </footer>
+
+      {/* Panel lateral retráctil (Drawer) */}
+      {panelAbierto && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Overlay oscuro semitransparente con desenfoque suave */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+            onClick={() => setPanelAbierto(false)}
+          />
+
+          {/* Panel deslizante desde el lateral derecho */}
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 z-50">
+            <aside className="w-screen max-w-sm bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-200">
+              {/* Cabecera del panel */}
+              <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-950/50">
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    <span>📑</span> Módulos GIDR
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Herramientas avanzadas de gestión y análisis
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPanelAbierto(false)}
+                  className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition text-sm font-bold"
+                  title="Cerrar panel (Esc)"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Lista de enlaces a módulos */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 pb-1">
+                  Módulos Adicionales
+                </div>
+
+                <NavLink
+                  to="/lopa"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-md">🛡️</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">LOPA</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Capas de protección independientes y cálculo de brechas de diseño.
+                    </div>
+                  </div>
+                </NavLink>
+
+                <NavLink
+                  to="/barreras"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-amber-100 dark:bg-amber-900/40 rounded-md">🧱</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Barreras y Salvaguardas</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Catálogo CMMS, factores de degradación y estado operativo en tiempo real.
+                    </div>
+                  </div>
+                </NavLink>
+
+                <NavLink
+                  to="/integraciones"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-emerald-100 dark:bg-emerald-900/40 rounded-md">⚡</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Integraciones & Telemetría</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Canales WebSocket en vivo, HUB OPC y gemelo digital de proceso.
+                    </div>
+                  </div>
+                </NavLink>
+
+                <NavLink
+                  to="/indicadores"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-md">📊</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">API 754 (Indicadores PSM)</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Métricas Tier 1 / Tier 2 de eventos de seguridad de procesos.
+                    </div>
+                  </div>
+                </NavLink>
+
+                <NavLink
+                  to="/auditoria"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md">📜</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Auditoría y Trazabilidad</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Registro inmutable de cambios y modificaciones en la plataforma.
+                    </div>
+                  </div>
+                </NavLink>
+
+                {/* Sección responsiva para pantallas pequeñas */}
+                <div className="md:hidden pt-4 border-t border-slate-200 dark:border-slate-800 space-y-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 pb-1">
+                    Navegación Principal
+                  </div>
+                  <NavLink
+                    to="/"
+                    onClick={() => setPanelAbierto(false)}
+                    className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Dashboard
+                  </NavLink>
+                  <NavLink
+                    to="/nodos"
+                    onClick={() => setPanelAbierto(false)}
+                    className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Nodos
+                  </NavLink>
+                  <NavLink
+                    to="/escenarios"
+                    onClick={() => setPanelAbierto(false)}
+                    className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Escenarios
+                  </NavLink>
+                  <NavLink
+                    to="/recomendaciones"
+                    onClick={() => setPanelAbierto(false)}
+                    className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Recomendaciones
+                  </NavLink>
+                </div>
+              </div>
+
+              {/* Pie del panel retráctil */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 text-center text-[11px] text-slate-400">
+                GIDR Módulo 4 · HUB de Integración de Riesgo
+              </div>
+            </aside>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -126,6 +126,19 @@ class EscenarioIn(BaseModel):
     causa: str = Field(min_length=1)
     peligro: str | None = None
     evento_tope: str | None = None
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
     frecuencia_diseno: Frecuencia
     consecuencia: str = Field(min_length=1)
     imp_economico: int = Field(ge=1, le=5)
@@ -139,6 +152,19 @@ class EscenarioUpdate(BaseModel):
     causa: str | None = Field(default=None, min_length=1)
     peligro: str | None = None
     evento_tope: str | None = None
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = None
+    rec_responsable: str | None = None
+    rec_estado: str | None = None
+    rec_comentarios: str | None = None
     frecuencia_diseno: Frecuencia | None = None
     consecuencia: str | None = Field(default=None, min_length=1)
     imp_economico: int | None = Field(default=None, ge=1, le=5)
@@ -203,6 +229,15 @@ class EscenarioOut(BaseModel):
     causa: str
     peligro: str | None = None
     evento_tope: str | None = None
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
     frecuencia_diseno: str
     consecuencia: str
     imp_economico: int
@@ -403,6 +438,11 @@ class EscenarioPriorizado(BaseModel):
     riesgo_actual: str
     brecha: int
     puntaje_actual: int
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
 
 
 class ResumenDashboard(BaseModel):
@@ -505,6 +545,15 @@ class BowTieGuardarIn(BaseModel):
     palabra_guia: str | None = None
     peligro: str | None = None
     evento_tope: str | None = None
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
     causa: str = Field(min_length=1)
     frecuencia_diseno: Frecuencia
     consecuencia: str = Field(min_length=1)
@@ -523,10 +572,65 @@ class ConsecuenciaBowTie(BaseModel):
     texto: str
 
 
+class BowTieCausaRama(BaseModel):
+    escenario_id: int
+    causa: str
+    frecuencia_diseno: str
+    frecuencia_actual: str
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
+    riesgo_diseno: str | None = None
+    riesgo_actual: str | None = None
+    brecha: float = 0.0
+    barreras_preventivas: list[BarreraEscenarioOut] = []
+    factores_escalamiento: list[FactorEscalamientoOut] = []
+    resultado: ResultadoOut | None = None
+
+
+class BowTieConsecuenciaRama(BaseModel):
+    consecuencia: str
+    severidad_max: int
+    imp_economico: int
+    imp_personas: int
+    imp_ambiente: int
+    imp_reputacion: int
+    escenario_ids: list[int] = []
+    barreras_mitigativas: list[BarreraEscenarioOut] = []
+    factores_escalamiento: list[FactorEscalamientoOut] = []
+
+
+class BowTieDesviacionOut(BaseModel):
+    desviacion_id: int  # palabra_guia_id
+    nodo_id: int
+    nodo: str
+    unidad_id: int
+    unidad: str
+    site: str
+    palabra_guia: str
+    peligro: str
+    evento_tope: str
+    ruta: str
+    riesgo_diseno_global: str
+    riesgo_actual_global: str
+    brecha_maxima: float
+    causas: list[BowTieCausaRama] = []
+    consecuencias: list[BowTieConsecuenciaRama] = []
+    escenario_seleccionado_id: int | None = None
+    layout: dict[str, Any] | None = None
+
+
 class BowTieCompletoOut(BaseModel):
     escenario_id: int
     peligro: str
     evento_tope: str
+    recomendacion: str | None = None
+    rec_prioridad: str | None = "Medium"
+    rec_responsable: str | None = None
+    rec_estado: str | None = "Proposed"
+    rec_comentarios: str | None = None
     causa: str
     frecuencia_diseno: str
     consecuencia: str
@@ -541,6 +645,7 @@ class BowTieCompletoOut(BaseModel):
     factores_escalamiento: list[FactorEscalamientoOut]
     resultado: ResultadoOut | None
     layout: dict[str, Any] | None = None
+    desviacion: BowTieDesviacionOut | None = None
 
 
 class ConfiguracionOut(BaseModel):

@@ -21,7 +21,8 @@ export interface RiesgosPorImpacto {
 export interface Escenario {
   id: number; empresa: string; site_id: number; site: string; unidad_id: number; unidad: string
   nodo_id: number; nodo: string; palabra_guia_id: number; palabra_guia: string; causa: string
-  peligro?: string | null; evento_tope?: string | null
+  peligro?: string | null; evento_tope?: string | null; recomendacion?: string | null
+  rec_prioridad?: string | null; rec_responsable?: string | null; rec_estado?: string | null; rec_comentarios?: string | null
   frecuencia_diseno: string; consecuencia: string; imp_economico: number; imp_personas: number
   imp_ambiente: number; imp_reputacion: number; version: number; n_barreras: number
   resultado: Resultado | null
@@ -61,7 +62,7 @@ export interface CambioEstadoOut {
 export interface CeldaMapa { frecuencia: string; severidad: number; nivel: Nivel; diseno: number; actual: number }
 export interface Priorizado {
   escenario_id: number; causa: string; unidad: string; nodo: string; riesgo_diseno: Nivel
-  riesgo_actual: Nivel; brecha: number; puntaje_actual: number
+  riesgo_actual: Nivel; brecha: number; puntaje_actual: number; recomendacion?: string | null
 }
 export interface ResumenDashboard {
   barreras_total: number; barreras_disponibles: number; pct_barreras_disponibles: number
@@ -88,10 +89,57 @@ export interface FactorEscalamiento {
   controles: ControlFactor[]
 }
 
+export interface BowTieCausaRama {
+  escenario_id: number
+  causa: string
+  frecuencia_diseno: string
+  frecuencia_actual: string
+  recomendacion?: string | null
+  riesgo_diseno?: Nivel | null
+  riesgo_actual?: Nivel | null
+  brecha?: number
+  barreras_preventivas: BarreraEscenario[]
+  factores_escalamiento: FactorEscalamiento[]
+  resultado?: Resultado | null
+}
+
+export interface BowTieConsecuenciaRama {
+  consecuencia: string
+  severidad_max: number
+  imp_economico: number
+  imp_personas: number
+  imp_ambiente: number
+  imp_reputacion: number
+  escenario_ids: number[]
+  barreras_mitigativas: BarreraEscenario[]
+  factores_escalamiento: FactorEscalamiento[]
+}
+
+export interface BowTieDesviacion {
+  desviacion_id: number
+  nodo_id: number
+  nodo: string
+  unidad_id: number
+  unidad: string
+  site: string
+  palabra_guia: string
+  peligro: string
+  evento_tope: string
+  ruta: string
+  riesgo_diseno_global: Nivel
+  riesgo_actual_global: Nivel
+  brecha_maxima: number
+  causas: BowTieCausaRama[]
+  consecuencias: BowTieConsecuenciaRama[]
+  escenario_seleccionado_id?: number | null
+  layout?: Record<string, { x: number; y: number }> | null
+}
+
 export interface BowTie {
   escenario_id: number
   peligro: string
   evento_tope: string
+  recomendacion?: string | null
   causa: string
   frecuencia_diseno: string
   consecuencia: string
@@ -106,6 +154,7 @@ export interface BowTie {
   factores_escalamiento: FactorEscalamiento[]
   resultado: Resultado | null
   layout?: Record<string, { x: number; y: number }> | null
+  desviacion?: BowTieDesviacion | null
 }
 
 export interface Api754 {

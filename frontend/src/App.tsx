@@ -7,6 +7,7 @@ import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Escenarios } from './pages/Escenarios'
+import { Recomendaciones } from './pages/Recomendaciones'
 import { Lopa } from './pages/Lopa'
 import { Nodos } from './pages/Nodos'
 import { BowTieView } from './pages/BowTieView'
@@ -54,8 +55,10 @@ export const App: React.FC = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="nodos" element={<Nodos />} />
                 <Route path="escenarios" element={<Escenarios />} />
+                <Route path="recomendaciones" element={<Recomendaciones />} />
                 <Route path="lopa" element={<Lopa />} />
                 <Route path="bowtie/:id" element={<BowTieView />} />
+                <Route path="bowtie/desviacion/:desviacionId" element={<BowTieView />} />
                 <Route path="barreras" element={<Barreras />} />
                 <Route path="integraciones" element={<Integraciones />} />
                 <Route path="indicadores" element={<Indicadores />} />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
@@ -107,6 +107,11 @@ interface EscenarioEditable {
   causa: string
   frecuencia_diseno: string
   consecuencia: string
+  recomendacion: string
+  rec_prioridad?: string
+  rec_responsable?: string
+  rec_estado?: string
+  rec_comentarios?: string
   /** Clave estable de grupo de consecuencia dentro de una desviación */
   consecuenciaGroupKey: string
   imp_economico: number
@@ -165,6 +170,11 @@ function crearBorrador(e: Escenario): EscenarioEditable {
     causa: e.causa,
     frecuencia_diseno: e.frecuencia_diseno,
     consecuencia: e.consecuencia,
+    recomendacion: e.recomendacion || '',
+    rec_prioridad: e.rec_prioridad || 'Medium',
+    rec_responsable: e.rec_responsable || '',
+    rec_estado: e.rec_estado || 'Proposed',
+    rec_comentarios: e.rec_comentarios || '',
     consecuenciaGroupKey: `${e.nodo_id}::${e.palabra_guia_id}::${e.consecuencia.trim()}`,
     imp_economico: e.imp_economico,
     imp_personas: e.imp_personas,
@@ -270,9 +280,17 @@ function IconBtn({
 }
 
 export function Escenarios() {
+  const navigate = useNavigate()
   const { usuario } = useAuth()
   const esAdmin = usuario?.rol === 'admin'
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const escenarioIdParam = searchParams.get('escenario_id')
+    ? Number(searchParams.get('escenario_id'))
+    : null
+  const palabraGuiaIdParam = searchParams.get('palabra_guia_id') || searchParams.get('desviacion_id')
+    ? Number(searchParams.get('palabra_guia_id') || searchParams.get('desviacion_id'))
+    : null
 
   const [unidadId, setUnidadId] = useState<number | undefined>()
   const [q, setQ] = useState('')
@@ -281,6 +299,7 @@ export function Escenarios() {
   const [guardandoIds, setGuardandoIds] = useState<Record<number, boolean>>({})
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<SeleccionCelda | null>(null)
+  const [escenarioEnfocado, setEscenarioEnfocado] = useState<number | null>(escenarioIdParam)
 
   const unidades = useQuery({
     queryKey: ['unidades'],
@@ -313,6 +332,41 @@ export function Escenarios() {
       return next
     })
   }, [qs.data])
+
+  // Desplazamiento y enfoque automático hacia la celda de recomendación cuando viene de la URL
+  useEffect(() => {
+    if (!escenarioIdParam) return
+    setEscenarioEnfocado(escenarioIdParam)
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`recomendacion-${escenarioIdParam}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [escenarioIdParam, qs.data])
+
+  // Desplazamiento y selección hacia la desviación cuando viene desde el BowTie
+  useEffect(() => {
+    if (!palabraGuiaIdParam || !qs.data?.items?.length) return
+    const primerEsc = qs.data.items.find((e) => e.palabra_guia_id === palabraGuiaIdParam)
+    if (primerEsc) {
+      setSeleccion({
+        celdaId: `causa-${primerEsc.id}`,
+        escenarioId: primerEsc.id,
+        barreraIdx: (primerEsc.barreras?.length ?? 0) > 0 ? 0 : null,
+        desviacionKey: `${primerEsc.nodo_id}::${primerEsc.palabra_guia_id}`,
+        consecuenciaKey: `${primerEsc.nodo_id}::${primerEsc.palabra_guia_id}::${primerEsc.consecuencia.trim()}`,
+      })
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`causa-${primerEsc.id}`) || document.getElementById(`fdis-${primerEsc.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+  }, [palabraGuiaIdParam, qs.data])
 
   const listaEscenarios = useMemo(() => {
     if (!qs.data?.items) return []
@@ -434,6 +488,16 @@ export function Escenarios() {
     }
   }, [seleccion, borradores, jerarquia])
 
+  // Desviación correspondiente a la celda actualmente seleccionada
+  const desviacionSeleccionada = useMemo(() => {
+    if (!seleccionActiva) return jerarquia[0] ?? null
+    return (
+      jerarquia.find((d) => d.desviacionKey === seleccionActiva.desviacionKey) ??
+      jerarquia[0] ??
+      null
+    )
+  }, [seleccionActiva, jerarquia])
+
   // Actualizar un único escenario
   const actualizarEscenario = (
     id: number,
@@ -528,6 +592,11 @@ export function Escenarios() {
       evento_tope: esc.evento_tope,
       frecuencia_diseno: esc.frecuencia_diseno,
       consecuencia: esc.consecuencia,
+      recomendacion: esc.recomendacion,
+      rec_prioridad: esc.rec_prioridad,
+      rec_responsable: esc.rec_responsable,
+      rec_estado: esc.rec_estado,
+      rec_comentarios: esc.rec_comentarios,
       imp_economico: Number(esc.imp_economico),
       imp_personas: Number(esc.imp_personas),
       imp_ambiente: Number(esc.imp_ambiente),
@@ -828,18 +897,18 @@ export function Escenarios() {
 
   const celdaActivaClass = (id: string) =>
     seleccionActiva?.celdaId === id
-      ? 'ring-2 ring-inset ring-[#1e4e79] bg-[#eef5fc]'
-      : 'hover:bg-slate-50/80'
+      ? 'ring-2 ring-inset ring-[#1e4e79] dark:ring-sky-500 bg-[#eef5fc] dark:bg-slate-800'
+      : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
 
   return (
     <div className="space-y-2">
       {/* Cabecera compacta */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+          <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
             Escenarios PHA — Hoja de Trabajo (HAZOP / LOPA Worksheet)
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Haz clic sobre cualquier celda para editar directamente. Una desviación puede agrupar múltiples consecuencias, causas y salvaguardas.
           </p>
         </div>
@@ -847,47 +916,39 @@ export function Escenarios() {
           <button
             type="button"
             onClick={() => setMostrarEsquema((v) => !v)}
-            className="px-2.5 py-1 text-xs font-medium rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            className="px-2.5 py-1 text-xs font-medium rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
           >
             {mostrarEsquema ? 'Ocultar fórmulas' : '∑ Fórmulas de cálculo'}
           </button>
-          {seleccionActiva && (
-            <Link
-              to={`/bowtie/${seleccionActiva.escenarioId}`}
-              className="px-2.5 py-1 text-xs font-medium rounded border border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100"
-            >
-              Ver en BowTie (#{seleccionActiva.escenarioId}) →
-            </Link>
-          )}
         </div>
       </div>
 
       {/* Panel desplegable de fórmulas */}
       {mostrarEsquema && (
-        <div className="bg-slate-50 border border-slate-300 rounded p-3 text-xs text-slate-700 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded p-3 text-xs text-slate-700 dark:text-slate-300 grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <div className="font-semibold text-slate-900">1. FRR Actual de Barrera</div>
-            <div className="text-[11px] text-slate-600 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">1. FRR Actual de Barrera</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
               Disponible: <code>FRR_d</code> | Degradado (<code>D = 1..100%</code>):{' '}
               <code>max(1, FRR_d × (100 - D)/100)</code> | Mant./Fuera serv./Inexist.:{' '}
               <code>1.0</code>
             </div>
           </div>
           <div>
-            <div className="font-semibold text-slate-900">2. Frecuencia Actual (F_a)</div>
-            <div className="text-[11px] text-slate-600 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">2. Frecuencia Actual (F_a)</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
               <code>idx(F_a) = max(0, idx(F_d) - ⌊log10(∏ FRR_act_prev × ∏ FRR_act_temp)⌋)</code>
             </div>
           </div>
           <div>
-            <div className="font-semibold text-slate-900">3. Riesgo de Diseño (RD)</div>
-            <div className="text-[11px] text-slate-600 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">3. Riesgo de Diseño (RD)</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
               Matriz 5×5 evaluada con <code>F_d</code> reducida por barreras preventivas y reactivas de diseño.
             </div>
           </div>
           <div>
-            <div className="font-semibold text-slate-900">4. Riesgo Actual por Impacto (E, P, A, R)</div>
-            <div className="text-[11px] text-slate-600 mt-0.5">
+            <div className="font-semibold text-slate-900 dark:text-slate-100">4. Riesgo Actual por Impacto (E, P, A, R)</div>
+            <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
               Matriz 5×5 evaluada con <code>F_a</code> reducida por barreras reactivas actuales para cada severidad <code>1–5</code>.
             </div>
           </div>
@@ -895,22 +956,22 @@ export function Escenarios() {
       )}
 
       {mensajeGuardado && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-3 py-1.5 rounded text-xs font-medium flex items-center justify-between">
+        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 px-3 py-1.5 rounded text-xs font-medium flex items-center justify-between">
           <span>✓ {mensajeGuardado}</span>
           <button
             type="button"
             onClick={() => setMensajeGuardado(null)}
-            className="text-emerald-700 hover:text-emerald-950 font-bold"
+            className="text-emerald-700 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white font-bold"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Contenedor principal estilo PHA-Pro Worksheet */}
-      <div className="border border-slate-400 bg-white shadow-sm rounded-sm overflow-hidden">
-        {/* Barra de herramientas superior tipo PHA-Pro (como en la imagen) */}
-        <div className="bg-white border-b border-slate-300 px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+      {/* Contenedor principal estilo PHA-Pro Worksheet (igual a Nodos) */}
+      <div className="border border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm rounded-sm overflow-hidden">
+        {/* Barra de herramientas superior tipo PHA-Pro */}
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-1">
             {esAdmin ? (
               <>
@@ -937,7 +998,7 @@ export function Escenarios() {
                   disabled={!seleccionActiva}
                   path="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
                 />
-                <span className="mx-1.5 h-4 w-px bg-slate-300" />
+                <span className="mx-1.5 h-4 w-px bg-slate-300 dark:bg-slate-700" />
                 <IconBtn
                   titulo="Exportar a CSV"
                   onClick={exportarCsvPha}
@@ -948,7 +1009,7 @@ export function Escenarios() {
                   onClick={() => window.print()}
                   path="M7 9V4h10v5M7 17H5v-6h14v6h-2M7 14h10v6H7z"
                 />
-                <span className="mx-1.5 h-4 w-px bg-slate-300" />
+                <span className="mx-1.5 h-4 w-px bg-slate-300 dark:bg-slate-700" />
 
                 {/* Menú de elementos adicionales (consecuencia, causa, salvaguardas) */}
                 <div className="relative">
@@ -959,7 +1020,7 @@ export function Escenarios() {
                     path="M5 12h.01M12 12h.01M19 12h.01"
                   />
                   {menuMas && seleccionActiva && (
-                    <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                    <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-1 shadow-lg">
                       {(
                         [
                           ['+ Consecuencia', handleAgregarConsecuencia],
@@ -976,7 +1037,7 @@ export function Escenarios() {
                             setMenuMas(false)
                             fn()
                           }}
-                          className="block w-full px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                          className="block w-full px-3 py-1.5 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
                         >
                           {etq}
                         </button>
@@ -996,7 +1057,7 @@ export function Escenarios() {
                   className={`ml-1 px-2.5 py-1 rounded-md font-semibold flex items-center gap-1.5 transition-colors ${
                     escenariosModificados.length > 0
                       ? 'bg-[#1e4e79] text-white hover:bg-[#163a5c]'
-                      : 'bg-slate-100 text-slate-400 border border-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
                   💾 Guardar
@@ -1008,16 +1069,34 @@ export function Escenarios() {
                 </button>
               </>
             ) : (
-              <span className="text-slate-600 font-medium px-2">
+              <span className="text-slate-600 dark:text-slate-400 font-medium px-2">
                 Modo solo lectura (inicia sesión como Admin para editar celdas)
               </span>
+            )}
+
+            {/* Botón único para ir al BowTie de la desviación actualmente seleccionada (minimalista oscuro) */}
+            {desviacionSeleccionada && (
+              <>
+                <span className="mx-1 h-4 w-px bg-slate-300 dark:bg-slate-700" />
+                <Link
+                  to={`/bowtie/desviacion/${desviacionSeleccionada.palabra_guia_id}`}
+                  title={`Ver BowTie interactivo de la Desviación ${desviacionSeleccionada.numDesv} (${desviacionSeleccionada.palabra_guia})`}
+                  className="px-3 py-1 rounded text-xs font-semibold bg-slate-900 hover:bg-black text-white hover:text-slate-100 border border-slate-700/80 hover:border-slate-600 flex items-center gap-2 transition-all duration-150 shadow-xs tracking-tight"
+                >
+                  <span className="text-[11px] opacity-90">🎯</span>
+                  <span>
+                    Ver BowTie ({desviacionSeleccionada.numDesv} · {desviacionSeleccionada.palabra_guia})
+                  </span>
+                  <span className="text-slate-400 text-[11px]">→</span>
+                </Link>
+              </>
             )}
           </div>
 
           {/* Buscador y filtro de unidad a la derecha (como Search Worksheet...) */}
           <div className="flex items-center gap-2">
             <select
-              className="bg-white border border-slate-300 rounded-sm px-2 py-1 text-xs text-slate-700 focus:outline-none focus:border-[#1e4e79]"
+              className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-sm px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-[#1e4e79]"
               value={unidadId ?? ''}
               onChange={(e) =>
                 setUnidadId(e.target.value ? Number(e.target.value) : undefined)
@@ -1031,7 +1110,7 @@ export function Escenarios() {
               ))}
             </select>
             <input
-              className="bg-white border border-slate-300 rounded-sm px-2.5 py-1 text-xs text-slate-800 w-52 focus:outline-none focus:border-[#1e4e79]"
+              className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-sm px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 w-52 focus:outline-none focus:border-[#1e4e79] placeholder-slate-400"
               placeholder="Search Worksheet..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -1041,25 +1120,31 @@ export function Escenarios() {
 
         {/* Tabla estilo hoja de cálculo PHA-Pro con celdas combinadas (rowSpan) */}
         <div className="overflow-x-auto max-h-[calc(100vh-205px)]">
-          <table className="w-full min-w-[1680px] border-collapse text-[12px] leading-snug text-slate-800 select-none">
-            <thead className="sticky top-0 z-20 bg-[#f1f3f6] text-slate-800 font-bold">
+          <table className="w-full min-w-[1940px] border-collapse text-[12px] leading-snug text-slate-800 dark:text-slate-200 select-none">
+            <thead className="sticky top-0 z-20 bg-[#f1f3f6] dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold">
               {/* Nivel 1 de Cabecera */}
               <tr>
                 <th
                   rowSpan={3}
-                  className="border border-slate-300 px-2.5 py-1.5 text-center w-[165px] min-w-[155px] bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-2.5 py-1.5 text-center w-[165px] min-w-[155px] bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Desviación /
                   <br />
-                  <span className="font-normal text-[11px] text-slate-600">
+                  <span className="font-normal text-[11px] text-slate-600 dark:text-slate-400">
                     Peligro Asociado
                   </span>
                 </th>
                 <th
-                  colSpan={19}
-                  className="border border-slate-300 px-2 py-1 text-center bg-[#e4e7ec] tracking-wide"
+                  colSpan={21}
+                  className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center bg-[#e4e7ec] dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 tracking-wide"
                 >
                   Consecuencias
+                </th>
+                <th
+                  rowSpan={3}
+                  className="border border-slate-300 dark:border-slate-700 px-2.5 py-1.5 text-center w-[260px] min-w-[240px] bg-[#ebedf0] dark:bg-slate-800"
+                >
+                  Recomendaciones PHA
                 </th>
               </tr>
 
@@ -1067,34 +1152,34 @@ export function Escenarios() {
               <tr>
                 <th
                   rowSpan={2}
-                  className="border border-slate-300 px-2.5 py-1.5 text-center w-[210px] min-w-[190px] bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-2.5 py-1.5 text-center w-[210px] min-w-[190px] bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Consecuencia
                 </th>
                 <th
                   colSpan={10}
-                  className="border border-slate-300 px-2 py-1 text-center bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Causas
                 </th>
                 <th
                   colSpan={4}
                   title="Severidad / Impactos: Económico (E), Personas (P), Ambiental (A), Reputación (R) [1-5]"
-                  className="border border-slate-300 px-1 py-1 text-center bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Impactos (S)
                 </th>
                 <th
                   rowSpan={2}
                   title="Frecuencia de ocurrencia actual calculada por causa"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[52px] min-w-[52px] bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[52px] min-w-[52px] bg-[#ebedf0] dark:bg-slate-800"
                 >
                   F<sub>act</sub>
                 </th>
                 <th
                   rowSpan={2}
                   title="Riesgo de Diseño calculado"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[68px] min-w-[68px] bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[68px] min-w-[68px] bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Riesgo
                   <br />
@@ -1103,7 +1188,7 @@ export function Escenarios() {
                 <th
                   colSpan={4}
                   title="Riesgo Actual calculado para cada dimensión de impacto (Económico, Personas, Ambiental, Reputación)"
-                  className="border border-slate-300 px-1 py-1 text-center bg-[#ebedf0]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Riesgo Actual (RR)
                 </th>
@@ -1111,95 +1196,95 @@ export function Escenarios() {
 
               {/* Nivel 3 de Cabecera */}
               <tr className="text-[11px]">
-                <th className="border border-slate-300 px-2 py-1 text-center w-[180px] min-w-[165px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[180px] min-w-[165px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Causa
                 </th>
                 <th
                   title="Frecuencia de ocurrencia de diseño (A-E)"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[68px] min-w-[68px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[68px] min-w-[68px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   F<sub>dis</sub>
                 </th>
-                <th className="border border-slate-300 px-2 py-1 text-center w-[210px] min-w-[185px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[210px] min-w-[185px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Salvaguarda / Barrera
                 </th>
-                <th className="border border-slate-300 px-2 py-1 text-center w-[125px] min-w-[125px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[125px] min-w-[125px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Tipo
                 </th>
-                <th className="border border-slate-300 px-1.5 py-1 text-center w-[100px] min-w-[95px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[100px] min-w-[95px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Tag
                 </th>
                 <th
                   title="Factor de Reducción de Riesgo (FRR) de diseño"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[64px] min-w-[64px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[64px] min-w-[64px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   FRR<sub>d</sub>
                 </th>
-                <th className="border border-slate-300 px-2 py-1 text-center w-[165px] min-w-[165px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[165px] min-w-[165px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Estado Actual
                 </th>
                 <th
                   title="Factor de degradación (1-100%) cuando la barrera está Degradada"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[64px] min-w-[64px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[64px] min-w-[64px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   Degr.%
                 </th>
                 <th
                   title="FRR actual calculado a partir del estado de la barrera"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   FRR<sub>a</sub>
                 </th>
-                <th className="border border-slate-300 px-2 py-1 text-center w-[195px] min-w-[175px] bg-[#f5f6f8]">
+                <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[195px] min-w-[175px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Factor Escalamiento / Control
                 </th>
                 {/* Impactos 1-5 */}
                 <th
                   title="Impacto Económico (1-5)"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   E
                 </th>
                 <th
                   title="Impacto en Personas (1-5)"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   P
                 </th>
                 <th
                   title="Impacto Ambiental (1-5)"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   A
                 </th>
                 <th
                   title="Impacto en Reputación (1-5)"
-                  className="border border-slate-300 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[60px] min-w-[60px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   R
                 </th>
                 {/* Riesgo Actual por Impacto */}
                 <th
                   title="Riesgo Actual Económico"
-                  className="border border-slate-300 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   E
                 </th>
                 <th
                   title="Riesgo Actual Personas"
-                  className="border border-slate-300 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   P
                 </th>
                 <th
                   title="Riesgo Actual Ambiental"
-                  className="border border-slate-300 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   A
                 </th>
                 <th
                   title="Riesgo Actual Reputación"
-                  className="border border-slate-300 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8]"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[46px] min-w-[46px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   R
                 </th>
@@ -1239,7 +1324,7 @@ export function Escenarios() {
                       return (
                         <tr
                           key={`${causaEsc.id}-b-${bIdx}`}
-                          className="align-top bg-white"
+                          className="align-top bg-white dark:bg-slate-900"
                         >
                           {/* 1. DESVIACIÓN Y PELIGRO ASOCIADO (rowSpan por toda la Desviación) */}
                           {esPrimeraFilaDesviacion && (
@@ -1248,12 +1333,12 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`desv-${grupoDesv.desviacionKey}`, null)
                               }
-                              className={`border border-slate-300 p-1.5 align-top transition-colors ${celdaActivaClass(
+                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
                                 `desv-${grupoDesv.desviacionKey}`
                               )}`}
                             >
-                              <div className="flex items-baseline gap-1 font-semibold text-slate-900">
-                                <span className="text-slate-500 shrink-0">
+                              <div className="flex items-baseline gap-1 font-semibold text-slate-900 dark:text-slate-100">
+                                <span className="text-slate-500 dark:text-slate-400 shrink-0">
                                   {grupoDesv.numDesv}
                                 </span>
                                 <input
@@ -1268,12 +1353,12 @@ export function Escenarios() {
                                       })
                                     )
                                   }
-                                  className="w-full bg-transparent font-semibold text-slate-900 focus:outline-none focus:bg-white px-0.5 rounded-xs"
+                                  className="w-full bg-transparent font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:bg-white dark:focus:bg-slate-800 px-0.5 rounded-xs"
                                 />
                               </div>
 
-                              <div className="mt-2 pt-1.5 border-t border-dashed border-slate-200">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+                              <div className="mt-2 pt-1.5 border-t border-dashed border-slate-200 dark:border-slate-700">
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-400">
                                   Peligro asociado:
                                 </div>
                                 <textarea
@@ -1289,11 +1374,11 @@ export function Escenarios() {
                                       })
                                     )
                                   }
-                                  className="w-full bg-transparent text-[11px] text-slate-700 resize-none focus:outline-none focus:bg-white mt-0.5"
+                                  className="w-full bg-transparent text-[11px] text-slate-700 dark:text-slate-300 resize-none focus:outline-none focus:bg-white dark:focus:bg-slate-800 mt-0.5"
                                 />
                               </div>
 
-                              <div className="mt-1 text-[10px] text-slate-400 truncate">
+                              <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500 truncate">
                                 Nodo: {grupoDesv.nodo}
                               </div>
                             </td>
@@ -1306,12 +1391,12 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`cons-${grupoCons.consecuenciaKey}`, null)
                               }
-                              className={`border border-slate-300 p-1.5 align-top transition-colors ${celdaActivaClass(
+                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
                                 `cons-${grupoCons.consecuenciaKey}`
                               )}`}
                             >
                               <div className="flex items-start gap-1">
-                                <span className="text-slate-500 font-medium shrink-0">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">
                                   {grupoCons.numCons}
                                 </span>
                                 <textarea
@@ -1330,7 +1415,7 @@ export function Escenarios() {
                                       })
                                     )
                                   }
-                                  className="w-full bg-transparent text-slate-800 resize-none focus:outline-none focus:bg-white"
+                                  className="w-full bg-transparent text-slate-800 dark:text-slate-200 resize-none focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                 />
                               </div>
                             </td>
@@ -1344,12 +1429,12 @@ export function Escenarios() {
                                 onClick={() =>
                                   seleccionar(`causa-${causaEsc.id}`, null)
                                 }
-                                className={`border border-slate-300 p-1.5 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
                                   `causa-${causaEsc.id}`
                                 )}`}
                               >
                                 <div className="flex items-start gap-1">
-                                  <span className="text-slate-500 font-medium shrink-0">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">
                                     {causaEsc.numCausa}
                                   </span>
                                   <textarea
@@ -1365,7 +1450,7 @@ export function Escenarios() {
                                         causa: e.target.value,
                                       }))
                                     }
-                                    className="w-full bg-transparent text-slate-800 resize-none focus:outline-none focus:bg-white"
+                                    className="w-full bg-transparent text-slate-800 dark:text-slate-200 resize-none focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                   />
                                 </div>
                               </td>
@@ -1376,7 +1461,7 @@ export function Escenarios() {
                                 onClick={() =>
                                   seleccionar(`fdis-${causaEsc.id}`, null)
                                 }
-                                className={`border border-slate-300 px-1.5 py-1 text-center align-top w-[68px] min-w-[68px] transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center align-top w-[68px] min-w-[68px] transition-colors ${celdaActivaClass(
                                   `fdis-${causaEsc.id}`
                                 )}`}
                               >
@@ -1390,15 +1475,15 @@ export function Escenarios() {
                                         frecuencia_diseno: e.target.value,
                                       }))
                                     }
-                                    className="w-full appearance-none bg-transparent pr-3.5 text-center font-bold text-slate-800 focus:outline-none cursor-pointer"
+                                    className="w-full appearance-none bg-transparent pr-3.5 text-center font-bold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
                                   >
                                     {FRECUENCIAS.map((f) => (
-                                      <option key={f} value={f}>
+                                      <option key={f} value={f} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
                                         {f}
                                       </option>
                                     ))}
                                   </select>
-                                  <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500">
+                                  <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                                     ▾
                                   </span>
                                 </div>
@@ -1417,12 +1502,12 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 p-1.5 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
                                   `bar-desc-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
                                 <div className="flex items-start gap-1">
-                                  <span className="text-slate-500 font-medium shrink-0">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">
                                     {bIdx + 1}
                                   </span>
                                   <textarea
@@ -1442,7 +1527,7 @@ export function Escenarios() {
                                         ),
                                       }))
                                     }
-                                    className="w-full bg-transparent text-slate-800 resize-none focus:outline-none focus:bg-white"
+                                    className="w-full bg-transparent text-slate-800 dark:text-slate-200 resize-none focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                   />
                                 </div>
                               </td>
@@ -1455,11 +1540,11 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 px-1.5 py-1 align-top w-[125px] min-w-[125px] transition-colors ${
+                                className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 align-top w-[125px] min-w-[125px] transition-colors ${
                                   seleccionActiva?.celdaId ===
                                   `bar-rol-${causaEsc.id}-${bIdx}`
                                     ? 'bg-[#1e4e79] text-white'
-                                    : 'hover:bg-slate-50'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                                 }`}
                               >
                                 <div className="relative flex items-center justify-between">
@@ -1479,15 +1564,15 @@ export function Escenarios() {
                                         ),
                                       }))
                                     }
-                                    className="w-full appearance-none bg-transparent pr-4 text-[11.5px] font-medium focus:outline-none cursor-pointer"
+                                    className="w-full appearance-none bg-transparent pr-4 text-[11.5px] font-medium text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
                                   >
-                                    <option className="text-slate-900" value="PREVENTIVA">
+                                    <option className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900" value="PREVENTIVA">
                                       Preventiva
                                     </option>
-                                    <option className="text-slate-900" value="REACTIVA">
+                                    <option className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900" value="REACTIVA">
                                       Reactiva
                                     </option>
-                                    <option className="text-slate-900" value="TEMPORAL">
+                                    <option className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900" value="TEMPORAL">
                                       Temporal
                                     </option>
                                   </select>
@@ -1505,7 +1590,7 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 p-1 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1 align-top transition-colors ${celdaActivaClass(
                                   `bar-tag-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1525,7 +1610,7 @@ export function Escenarios() {
                                       ),
                                     }))
                                   }
-                                  className="w-full bg-transparent font-mono text-[11px] text-slate-700 focus:outline-none focus:bg-white"
+                                  className="w-full bg-transparent font-mono text-[11px] text-slate-700 dark:text-slate-300 focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                 />
                               </td>
 
@@ -1537,7 +1622,7 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 p-1 text-center align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top transition-colors ${celdaActivaClass(
                                   `bar-frrd-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1563,7 +1648,7 @@ export function Escenarios() {
                                       ),
                                     }))
                                   }
-                                  className="w-full bg-transparent text-center font-mono text-slate-800 focus:outline-none focus:bg-white"
+                                  className="w-full bg-transparent text-center font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                 />
                               </td>
 
@@ -1575,7 +1660,7 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 px-1.5 py-1 align-top w-[165px] min-w-[165px] transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 align-top w-[165px] min-w-[165px] transition-colors ${celdaActivaClass(
                                   `bar-est-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1598,19 +1683,19 @@ export function Escenarios() {
                                     }
                                     className={`w-full appearance-none bg-transparent pr-4 text-[11.5px] font-medium focus:outline-none cursor-pointer ${
                                       barrera.estado_actual === 'DISPONIBLE'
-                                        ? 'text-emerald-800'
+                                        ? 'text-emerald-800 dark:text-emerald-400'
                                         : barrera.estado_actual === 'DEGRADADO'
-                                          ? 'text-amber-800 font-semibold'
-                                          : 'text-rose-800 font-semibold'
+                                          ? 'text-amber-800 dark:text-amber-400 font-semibold'
+                                          : 'text-rose-800 dark:text-rose-400 font-semibold'
                                     }`}
                                   >
                                     {ESTADOS.map((est) => (
-                                      <option key={est} value={est}>
+                                      <option key={est} value={est} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
                                         {ESTADO_ETIQUETA[est]}
                                       </option>
                                     ))}
                                   </select>
-                                  <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500">
+                                  <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                                     ▾
                                   </span>
                                 </div>
@@ -1624,7 +1709,7 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 p-1 text-center align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top transition-colors ${celdaActivaClass(
                                   `bar-deg-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1661,15 +1746,15 @@ export function Escenarios() {
                                         })
                                       )
                                     }
-                                    className="w-full bg-amber-50 border border-amber-300 rounded-xs text-center font-mono text-[11px] font-bold text-amber-900 focus:outline-none"
+                                    className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xs text-center font-mono text-[11px] font-bold text-amber-900 dark:text-amber-200 focus:outline-none"
                                   />
                                 ) : (
-                                  <span className="text-slate-300">—</span>
+                                  <span className="text-slate-300 dark:text-slate-600">—</span>
                                 )}
                               </td>
 
                               {/* FRR Actual Calculado */}
-                              <td className="border border-slate-300 p-1 text-center align-top bg-slate-50/70 font-mono font-semibold text-slate-700">
+                              <td className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top bg-slate-50/70 dark:bg-slate-800/50 font-mono font-semibold text-slate-700 dark:text-slate-300">
                                 {calcFrrActual(
                                   barrera.frr_diseno,
                                   barrera.estado_actual,
@@ -1685,7 +1770,7 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 p-1 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1 align-top transition-colors ${celdaActivaClass(
                                   `bar-fe-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1707,7 +1792,7 @@ export function Escenarios() {
                                       ),
                                     }))
                                   }
-                                  className="w-full bg-transparent text-[11px] text-slate-800 placeholder:text-slate-300 focus:outline-none focus:bg-white"
+                                  className="w-full bg-transparent text-[11px] text-slate-800 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                 />
                                 <input
                                   disabled={!esAdmin}
@@ -1727,7 +1812,7 @@ export function Escenarios() {
                                       ),
                                     }))
                                   }
-                                  className="w-full bg-transparent text-[11px] text-teal-800 placeholder:text-slate-300 border-t border-dotted border-slate-200 mt-0.5 pt-0.5 focus:outline-none focus:bg-white"
+                                  className="w-full bg-transparent text-[11px] text-teal-800 dark:text-teal-400 placeholder:text-slate-300 dark:placeholder:text-slate-600 border-t border-dotted border-slate-200 dark:border-slate-700 mt-0.5 pt-0.5 focus:outline-none focus:bg-white dark:focus:bg-slate-800"
                                 />
                               </td>
                             </>
@@ -1737,7 +1822,7 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`bar-empty-${causaEsc.id}`, null)
                               }
-                              className={`border border-slate-300 p-2 text-center italic text-slate-400 ${celdaActivaClass(
+                              className={`border border-slate-300 dark:border-slate-700 p-2 text-center italic text-slate-400 dark:text-slate-500 ${celdaActivaClass(
                                 `bar-empty-${causaEsc.id}`
                               )}`}
                             >
@@ -1765,7 +1850,7 @@ export function Escenarios() {
                                       null
                                     )
                                   }
-                                  className={`border border-slate-300 px-1.5 py-1 text-center align-top w-[60px] min-w-[60px] transition-colors ${celdaActivaClass(
+                                  className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center align-top w-[60px] min-w-[60px] transition-colors ${celdaActivaClass(
                                     `${campo}-${grupoCons.consecuenciaKey}`
                                   )}`}
                                 >
@@ -1782,15 +1867,15 @@ export function Escenarios() {
                                           })
                                         )
                                       }
-                                      className="w-full appearance-none bg-transparent pr-3.5 text-center font-bold text-slate-800 focus:outline-none cursor-pointer"
+                                      className="w-full appearance-none bg-transparent pr-3.5 text-center font-bold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
                                     >
                                       {[1, 2, 3, 4, 5].map((n) => (
-                                        <option key={n} value={n}>
+                                        <option key={n} value={n} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
                                           {n}
                                         </option>
                                       ))}
                                     </select>
-                                    <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500">
+                                    <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500 dark:text-slate-400">
                                       ▾
                                     </span>
                                   </div>
@@ -1805,7 +1890,7 @@ export function Escenarios() {
                               {/* Frecuencia de ocurrencia actual calculada */}
                               <td
                                 rowSpan={causaEsc.filasBarrera}
-                                className="border border-slate-300 p-1 text-center align-top bg-slate-50 font-mono font-bold text-slate-900"
+                                className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top bg-slate-50 dark:bg-slate-800 font-mono font-bold text-slate-900 dark:text-slate-100"
                               >
                                 {calc.frecuencia_actual}
                               </td>
@@ -1813,7 +1898,7 @@ export function Escenarios() {
                               {/* Riesgo de Diseño global */}
                               <td
                                 rowSpan={causaEsc.filasBarrera}
-                                className={`border border-slate-300 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
+                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
                                   calc.riesgo_diseno_global
                                 )}`}
                               >
@@ -1833,13 +1918,54 @@ export function Escenarios() {
                                   key={k}
                                   rowSpan={causaEsc.filasBarrera}
                                   title={`Riesgo Actual (${k}): ${niv}`}
-                                  className={`border border-slate-300 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
+                                  className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
                                     niv
                                   )}`}
                                 >
                                   {niv[0]}
                                 </td>
                               ))}
+
+                              {/* 7. RECOMENDACIONES PHA (rowSpan por Causa) - Solo lectura, clic navega a Recomendaciones */}
+                              <td
+                                id={`recomendacion-${causaEsc.id}`}
+                                rowSpan={causaEsc.filasBarrera}
+                                onClick={() =>
+                                  navigate(`/recomendaciones?escenario_id=${causaEsc.id}`)
+                                }
+                                title="Clic para ver y editar en la pestaña Recomendaciones ↗"
+                                className={`border border-slate-300 dark:border-slate-700 p-2 align-top w-[260px] min-w-[240px] cursor-pointer group transition-all duration-200 hover:bg-blue-50/80 dark:hover:bg-blue-950/40 hover:shadow-xs ${
+                                  escenarioEnfocado === causaEsc.id
+                                    ? 'bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-500 shadow-md'
+                                    : 'bg-slate-50/30 dark:bg-slate-900/30'
+                                }`}
+                              >
+                                <div className="flex flex-col h-full gap-1">
+                                  {escenarioEnfocado === causaEsc.id && (
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-200/90 dark:bg-amber-900/60 px-1.5 py-0.5 rounded animate-pulse mb-1">
+                                      <span>★ Escenario Crítico</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setEscenarioEnfocado(null)
+                                        }}
+                                        className="text-amber-900 dark:text-amber-200 hover:text-black dark:hover:text-white ml-1 text-xs font-bold"
+                                        title="Cerrar foco"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  )}
+                                  <p className="text-[11.5px] leading-relaxed text-slate-800 dark:text-slate-200 select-text">
+                                    {causaEsc.recomendacion?.trim() || (
+                                      <span className="italic text-slate-400 dark:text-slate-500">
+                                        Sin recomendación registrada...
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </td>
                             </>
                           )}
                         </tr>
@@ -1852,7 +1978,7 @@ export function Escenarios() {
               {jerarquia.length === 0 && (
                 <tr>
                   <td
-                    colSpan={20}
+                    colSpan={23}
                     className="p-8 text-center text-slate-400 text-sm"
                   >
                     No se encontraron escenarios PHA para los filtros seleccionados.
@@ -1867,22 +1993,22 @@ export function Escenarios() {
       {/* Modal: nueva desviación con selección de nodo */}
       {modalDesv && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <h3 className="text-sm font-bold text-slate-900">Nueva desviación</h3>
+          <div className="w-full max-w-md space-y-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Nueva desviación</h3>
               <button
                 type="button"
                 onClick={() => setModalDesv(false)}
-                className="font-bold text-slate-400 hover:text-slate-600"
+                className="font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 ✕
               </button>
             </div>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="mb-1 block font-medium text-slate-600">Nodo asociado</label>
+                <label className="mb-1 block font-medium text-slate-600 dark:text-slate-400">Nodo asociado</label>
                 <select
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs"
+                  className="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e4e79]"
                   value={nodoNuevoId}
                   onChange={(e) =>
                     setNodoNuevoId(e.target.value ? Number(e.target.value) : '')
@@ -1897,11 +2023,11 @@ export function Escenarios() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block font-medium text-slate-600">
+                <label className="mb-1 block font-medium text-slate-600 dark:text-slate-400">
                   Desviación (palabra guía)
                 </label>
                 <input
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs"
+                  className="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:border-[#1e4e79]"
                   placeholder="Ej. Más temperatura"
                   value={nombreDesvNueva}
                   onChange={(e) => setNombreDesvNueva(e.target.value)}
@@ -1912,7 +2038,7 @@ export function Escenarios() {
               <button
                 type="button"
                 onClick={() => setModalDesv(false)}
-                className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                className="rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
               >
                 Cancelar
               </button>

@@ -60,8 +60,9 @@ COLUMNAS: list[tuple[str, str, bool]] = [
     ("Vigencia desde", "vigencia_desde", False),
     ("Vigencia hasta", "vigencia_hasta", False),
     ("MOC", "moc_ref", False),
+    ("Recomendación PHA", "recomendacion", False),
 ]
-ALIAS = {"moc": "moc_ref", "tag": "barrera_tag", "barrera": "barrera_tag", "frr": "frr_diseno"}
+ALIAS = {"moc": "moc_ref", "tag": "barrera_tag", "barrera": "barrera_tag", "frr": "frr_diseno", "recomendacion_pha": "recomendacion"}
 CLAVES = {k for _, k, _ in COLUMNAS}
 
 
@@ -149,6 +150,7 @@ class FilaValida:
     desde: date | None
     hasta: date | None
     moc: str | None
+    recomendacion: str | None = None
 
 
 def validar_fila(i: int, f: dict[str, str]) -> tuple[FilaValida | None, list[ErrorFila]]:
@@ -208,7 +210,7 @@ def validar_fila(i: int, f: dict[str, str]) -> tuple[FilaValida | None, list[Err
             f["empresa"], f["site"], f["unidad"], f["nodo"], f["palabra_guia"], f["causa"], frec,
             f["consecuencia"], (imps[0], imps[1], imps[2], imps[3]), tag,
             f.get("barrera_descripcion") or None, frr, tipo, lado, desde, hasta,
-            f.get("moc_ref") or None,
+            f.get("moc_ref") or None, f.get("recomendacion") or None,
         ),
         [],
     )
@@ -261,6 +263,8 @@ def importar_hazop(
             imp_economico=v.impactos[0], imp_personas=v.impactos[1],
             imp_ambiente=v.impactos[2], imp_reputacion=v.impactos[3],
         )
+        if v.recomendacion:
+            datos["recomendacion"] = v.recomendacion
         esc = db.scalars(select(Escenario).filter_by(palabra_guia_id=pg.id, causa=v.causa)).first()
         if esc is None:
             esc = Escenario(palabra_guia_id=pg.id, causa=v.causa, **datos)

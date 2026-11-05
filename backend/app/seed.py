@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
-from app.models import Base, Empresa, Nodo, Usuario
+from app.models import Base, Empresa, Escenario, Nodo, Usuario
 from app.security import hash_password
 from app.services import importer, recalc
 
@@ -23,6 +23,85 @@ EMPRESA = "PETROQUÍMICA DEMO S.A. (FICTICIA)"
 SITE = "Refinería Demo (ficticia)"
 CDU = "Destilación atmosférica CDU-100"
 HDT = "Hidrotratamiento HDT-200"
+
+# Recomendaciones técnicas PHA por causa para cada desviación
+RECOMENDACIONES_SEED: dict[str, str] = {
+    "Falla del controlador TIC-101 con salida alta": (
+        "REC-H101-01: Instalar transmisor dual de temperatura en salida COT con votación 2oo3 y prueba periódica trimestral de lazo SIS-H101-TSHH."
+    ),
+    "Taponamiento parcial (coque) en un paso de carga": (
+        "REC-H101-02: Implementar monitoreo en línea de delta P por paso de serpentín y programa predictivo de descopeo mecánico antes de alcanzar 65% de taponamiento."
+    ),
+    "Falla de la bomba de carga P-101A": (
+        "REC-H101-03: Automatizar transferencia rápida a bomba de reserva P-101B por presostato de descarga y enclavamiento con FSLL-H101."
+    ),
+    "Cierre inadvertido de válvula de carga": (
+        "REC-H101-04: Implementar traba mecánica (Car Seal Open) en válvulas manuales de carga al serpentín y señalización de seguridad en campo."
+    ),
+    "Pérdida de presión de gas combustible": (
+        "REC-H101-05: Realizar mantenimiento semestral al sistema de gestión de quemadores BMS y verificar doble bloqueo estanco con purga automática (Double Block & Bleed)."
+    ),
+    "Pérdida de condensación de cabeza (falla de aeroenfriadores)": (
+        "REC-T101-01: Diseñar esquema de transferencia eléctrica de emergencia para motores de aeroenfriadores EA-101 y verificar capacidad de alivio de PSV-101."
+    ),
+    "Cierre de válvula de salida de cabeza": (
+        "REC-T101-02: Colocar bloqueo con candado (Lock Open) en válvula de corte de cabeza y verificar descarga directa sin contrapresión hacia cabezal de antorcha."
+    ),
+    "Incendio externo en la zona de la columna": (
+        "REC-T101-03: Inspección visual mensual y prueba de flujo de monitores contraincendios fijos FW-100 en el anillo perimetral de la columna."
+    ),
+    "Falla del transmisor de nivel LT-101 en el fondo": (
+        "REC-T101-04: Instalar transmisor de nivel radar guiado independiente para el lazo SIS LSHH-T101 separado del transmisor DCS de control."
+    ),
+    "Pérdida de bombas de fondo": (
+        "REC-T101-05: Habilitar alarma temprana de bajo caudal de recirculación de fondo y verificar cierre hermético de válvulas ESD-100."
+    ),
+    "Bloqueo de la salida del desalador": (
+        "REC-D101-01: Inspección de calibración anual en banco para PSV-103 y prueba de respuesta de operador ante alarma AL-D101-PAH."
+    ),
+    "Expansión térmica con líquido atrapado en intercambiador": (
+        "REC-D101-02: Procedimiento de aislamiento térmico seguro con despresurización obligatoria durante intervenciones de mantenimiento."
+    ),
+    "Ingreso de agua en exceso en el crudo": (
+        "REC-D101-03: Instalar analizador continuo de corte de agua (BS&W) en recibo de crudo con desvío automático a tanques de sedimentación."
+    ),
+    "Corrosión por cloruros en intercambiadores": (
+        "REC-D101-04: Medición de espesores por ultrasonido cada 6 meses (INSP-D101) e inyección de inhibidor de corrosión en cabeza."
+    ),
+    "Pérdida de quench de hidrógeno por falla de lazo de control": (
+        "REC-R201-01: Validar redundancia SIL-3 en lazo de disparo y despresurización de emergencia SIS-R201-TSHH y prueba parcial de carrera en válvulas QV-R201."
+    ),
+    "Mala distribución de flujo en el lecho (canalización)": (
+        "REC-R201-02: Mapeo termográfico de pared de reactor e inspección de platos distribuidores en cada parada mayor de catalizador."
+    ),
+    "Cierre de la válvula de salida del reactor": (
+        "REC-R201-03: Inspeccionar anualmente el disco de ruptura en serie con PSV-201 y revisar alineación a cabezal de antorcha de alta presión."
+    ),
+    "Falla de la válvula de control de purga de presión": (
+        "REC-R201-04: Proveer posicionador inteligente con autodiagnóstico de fricción en la válvula de purga y alarma en DCS por desviación de consigna."
+    ),
+    "Disparo del compresor de reciclo por falla eléctrica": (
+        "REC-K201-01: Conectar compresor K-201 a barraje de potencia esencial y verificar enclavamiento de corte automático de carga al reactor."
+    ),
+    "Fuga en el sello del compresor": (
+        "REC-K201-02: Programa preventivo de monitoreo de gas de barrera en sellos secos y calibración trimestral de detectores DG-K201."
+    ),
+    "Falla del aeroenfriador de descarga": (
+        "REC-K201-03: Monitoreo continuo de vibración TSV-K201 y mantenimiento periódico a correas y rodamientos de ventiladores."
+    ),
+    "Contaminación del aceite lubricante / falla de cojinete": (
+        "REC-K201-04: Análisis mensual de espectrometría y partículas de desgaste en aceite lubricante de cojinetes del compresor K-201."
+    ),
+    "Falla del lazo de nivel LIC-202 (válvula cerrada)": (
+        "REC-V202-01: Probar enclavamiento SIS-V202-LSHH semestralmente con inyección de señal simulada y prueba de carrera de válvula de corte."
+    ),
+    "Pérdida del sello de líquido en V-202 (LIC abre al 100 %)": (
+        "REC-V202-02: Calibración y prueba de estanqueidad de la válvula de corte por muy bajo nivel SIS-V202-LSLL para mitigar gas blowby a baja presión."
+    ),
+    "Falla del transmisor LT-202 con lectura alta falsa": (
+        "REC-V202-03: Implementar transmisores de nivel diferenciales redundantes con algoritmo de detección de señal estancada (frozen signal)."
+    ),
+}
 
 # Metadatos técnicos de los nodos reales de la planta para la hoja de Nodos
 NODOS_META: dict[str, dict[str, object]] = {
@@ -207,11 +286,13 @@ def filas_hazop(hoy: date | None = None) -> list[dict[str, str]]:
     ]
     filas: list[dict[str, str]] = []
     for i, (uni, nodo, pg, causa, frec, cons, imps, bars) in enumerate(ESCENARIOS):
+        rec_sug = RECOMENDACIONES_SEED.get(causa, "")
         base = {
             "empresa": EMPRESA, "site": SITE, "unidad": uni, "nodo": nodo, "palabra_guia": pg,
             "causa": causa, "frecuencia_diseno": frec, "consecuencia": cons,
             "imp_economico": str(imps[0]), "imp_personas": str(imps[1]),
             "imp_ambiente": str(imps[2]), "imp_reputacion": str(imps[3]),
+            "recomendacion": rec_sug,
         }
         for tag, frr, lado in bars:
             filas.append({**base, "barrera_tag": tag, "barrera_descripcion": BARRERAS[tag],
@@ -242,6 +323,42 @@ def poblar_metadatos_nodos(db: Session) -> int:
     return actualizados
 
 
+def poblar_recomendaciones_escenarios(db: Session) -> int:
+    actualizados = 0
+    resp_map = [
+        ("Mantenimiento Mecánico", ["válvula", "check", "bypass", "filtro", "tubería", "psv", "disco"]),
+        ("Instrumentación y Control", ["transmisor", "sdv", "sis", "alarma", "controlador", "interlock", "detector", "gas", "pt-"]),
+        ("Ingeniería de Procesos", ["capacidad", "diseño", "simulación", "venteo", "dimensionamiento"]),
+        ("Operaciones", ["procedimiento", "purga", "inspección", "operador", "manual"]),
+    ]
+    for esc in db.scalars(select(Escenario)).all():
+        rec = RECOMENDACIONES_SEED.get(esc.causa)
+        modificado = False
+        if rec and not esc.recomendacion:
+            esc.recomendacion = rec
+            modificado = True
+        if not esc.rec_prioridad:
+            esc.rec_prioridad = "High" if (esc.imp_personas >= 4 or esc.imp_economico >= 4) else "Medium"
+            modificado = True
+        if not esc.rec_estado:
+            esc.rec_estado = "Proposed"
+            modificado = True
+        if not esc.rec_responsable:
+            texto = ((esc.recomendacion or "") + " " + (esc.causa or "")).lower()
+            asignado = "Ingeniería de Procesos"
+            for resp, kws in resp_map:
+                if any(k in texto for k in kws):
+                    asignado = resp
+                    break
+            esc.rec_responsable = asignado
+            modificado = True
+        if modificado:
+            actualizados += 1
+    if actualizados:
+        db.commit()
+    return actualizados
+
+
 def sembrar(db: Session, reset: bool = False) -> str:
     if reset:
         for t in reversed(Base.metadata.sorted_tables):
@@ -253,11 +370,13 @@ def sembrar(db: Session, reset: bool = False) -> str:
     db.commit()
     if db.scalars(select(Empresa)).first() is not None:
         poblar_metadatos_nodos(db)
-        return "La base ya tiene datos; seed omitido (use --reset para recargar)."
+        recs = poblar_recomendaciones_escenarios(db)
+        return f"La base ya tiene datos; seed omitido ({recs} recomendaciones actualizadas)."
     res = importer.importar_hazop(db, filas_hazop(), usuario="seed", fuente="SEED",
                                  ts_base=recalc.ahora() - timedelta(days=30))
     db.commit()
     poblar_metadatos_nodos(db)
+    poblar_recomendaciones_escenarios(db)
     if res.errores:
         raise RuntimeError(f"Errores en seed: {res.errores}")
     return (f"Seed OK: {res.escenarios_creados} escenarios, {res.barreras_creadas} barreras, "

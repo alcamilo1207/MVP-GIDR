@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import type { BowTie, Estado, BarreraEscenario } from '../lib/types'
+import type { BowTie, BowTieDesviacion, Estado, BarreraEscenario } from '../lib/types'
 import { ESTADOS, ESTADO_CLASES, ESTADO_ETIQUETA, NIVEL_CLASES, fmtBrecha, fmtFrr } from '../lib/format'
 
 // ==========================================
@@ -320,7 +320,9 @@ type BloqueSeleccionado = any
 // ==========================================
 
 export const BowTieView: React.FC = () => {
-  const { id } = useParams<{ id: string }>()
+  const { id, desviacionId } = useParams<{ id?: string; desviacionId?: string }>()
+  const esDesviacion = Boolean(desviacionId)
+  const targetId = desviacionId || id
   const { usuario } = useAuth()
   const esAdmin = usuario?.rol === 'admin'
   const queryClient = useQueryClient()
@@ -337,18 +339,55 @@ export const BowTieView: React.FC = () => {
   // Tipo de bloque a añadir desde el panel de selección inferior izquierdo
   const [tipoBloqueAñadir, setTipoBloqueAñadir] = useState<string>('threat')
 
-  // Consulta de datos completos del BowTie
+  // Consulta de datos completos del BowTie (por Desviación o Escenario)
   const { data: bt, isLoading } = useQuery<BowTie>({
-    queryKey: ['bowtie', id],
-    queryFn: () => api.get<BowTie>(`/bowtie/${id}`),
+    queryKey: ['bowtie', esDesviacion ? `desv-${targetId}` : targetId],
+    queryFn: async () => {
+      if (esDesviacion) {
+        const desv = await api.get<BowTieDesviacion>(`/bowtie/desviacion/${targetId}`)
+        return {
+          escenario_id: desv.causas[0]?.escenario_id || 0,
+          peligro: desv.peligro,
+          evento_tope: desv.evento_tope,
+          recomendacion: desv.causas[0]?.recomendacion,
+          causa: desv.causas[0]?.causa || '',
+          frecuencia_diseno: desv.causas[0]?.frecuencia_diseno || 'C',
+          consecuencia: desv.consecuencias[0]?.consecuencia || '',
+          ruta: desv.ruta,
+          imp_economico: desv.consecuencias[0]?.imp_economico || 3,
+          imp_personas: desv.consecuencias[0]?.imp_personas || 3,
+          imp_ambiente: desv.consecuencias[0]?.imp_ambiente || 3,
+          imp_reputacion: desv.consecuencias[0]?.imp_reputacion || 3,
+          preventivas: desv.causas[0]?.barreras_preventivas || [],
+          mitigativas: desv.consecuencias[0]?.barreras_mitigativas || [],
+          consecuencias: [],
+          factores_escalamiento: [],
+          resultado: desv.causas[0]?.resultado || null,
+          layout: desv.layout,
+          desviacion: desv,
+        }
+      }
+      return api.get<BowTie>(`/bowtie/${targetId}`)
+    },
   })
 
-  // Mutación para guardar el diagrama completo en PostgreSQL
-  const mutacionGuardar = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => api.put<BowTie>(`/bowtie/${id}`, payload),
+  // Mutación para guardar el diagrama completo
+  const mutacionGuardar = useMutation<BowTie | BowTieDesviacion, Error, Record<string, unknown>>({
+    mutationFn: (payload: Record<string, unknown>) => {
+      const desvId = bt?.desviacion?.desviacion_id || (esDesviacion ? targetId : null)
+      return desvId
+        ? api.put<BowTieDesviacion>(`/bowtie/desviacion/${desvId}`, payload)
+        : api.put<BowTie>(`/bowtie/${targetId}`, payload)
+    },
     onSuccess: (data) => {
-      queryClient.setQueryData(['bowtie', id], data)
-      queryClient.invalidateQueries({ queryKey: ['escenarios'] })
+      queryClient.setQueryData(['bowtie', esDesviacion ? `desv-${targetId}` : targetId], (prev: any) => {
+        if (esDesviacion) {
+          return { ...prev, desviacion: data, layout: (data as any)?.layout || prev?.layout }
+        }
+        return data
+      })
+      queryClient.invalidateQueries({ queryKey: ['bowtie'] })
+      queryClient.invalidateQueries({ queryKey: ['escenarios-pha'] })
       queryClient.invalidateQueries({ queryKey: ['barreras'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       alert('✓ Diagrama BowTie guardado y riesgo recalculado con éxito.')
@@ -358,35 +397,87 @@ export const BowTieView: React.FC = () => {
     },
   })
 
-  // Construcción del grafo de 8 bloques a partir de los datos
+  // Construcción del grafo de 8 bloques unificado para la Desviación completa
   useEffect(() => {
     if (!bt) return
 
-    const layout = bt.layout || {}
+    const desv = bt.desviacion
+    const layout = (desv?.layout || bt.layout || {}) as Record<string, { x: number; y: number }>
     const nodeList: Node[] = []
     const edgeList: Edge[] = []
 
+    const causas =
+      desv && desv.causas.length > 0
+        ? desv.causas
+        : [
+            {
+              escenario_id: bt.escenario_id,
+              causa: bt.causa,
+              frecuencia_diseno: bt.frecuencia_diseno,
+              frecuencia_actual: bt.resultado?.frecuencia_actual || bt.frecuencia_diseno,
+              recomendacion: bt.recomendacion,
+              riesgo_diseno: bt.resultado?.riesgo_diseno || 'Bajo',
+              riesgo_actual: bt.resultado?.riesgo_actual || 'Bajo',
+              brecha: bt.resultado?.brecha || 0,
+              barreras_preventivas: bt.preventivas,
+              factores_escalamiento: bt.factores_escalamiento || [],
+              resultado: bt.resultado,
+            },
+          ]
+
+    const consecuencias =
+      desv && desv.consecuencias.length > 0
+        ? desv.consecuencias
+        : [
+            {
+              consecuencia: bt.consecuencia,
+              severidad_max: Math.max(
+                bt.imp_personas,
+                bt.imp_ambiente,
+                bt.imp_economico,
+                bt.imp_reputacion
+              ),
+              imp_economico: bt.imp_economico,
+              imp_personas: bt.imp_personas,
+              imp_ambiente: bt.imp_ambiente,
+              imp_reputacion: bt.imp_reputacion,
+              escenario_ids: [bt.escenario_id],
+              barreras_mitigativas: bt.mitigativas,
+              factores_escalamiento: bt.factores_escalamiento || [],
+            },
+          ]
+
+    const nCausas = Math.max(1, causas.length)
+    const nCons = Math.max(1, consecuencias.length)
+    const maxRamas = Math.max(nCausas, nCons)
+    const espaciadoY = 240
+    const centerY = Math.max(220, (maxRamas * espaciadoY) / 2)
+
     // 1. Peligro (Hazard) - Posición superior central
+    const peligroLabel = desv ? desv.peligro : bt.peligro
     nodeList.push({
       id: 'hazard',
       type: 'hazardNode',
-      position: layout['hazard'] || { x: 570, y: 30 },
+      position: layout['hazard'] || { x: 570, y: Math.max(20, centerY - 190) },
       data: {
-        label: bt.peligro,
-        onEdit: () => esAdmin && setBloqueSeleccionado({ tipo: 'hazard', valor: bt.peligro }),
+        label: peligroLabel,
+        onEdit: () => esAdmin && setBloqueSeleccionado({ tipo: 'hazard', valor: peligroLabel }),
       },
     })
 
     // 2. Evento Tope (Top Event) - Centro neurálgico
+    const eventoLabel = desv ? desv.evento_tope : bt.evento_tope
+    const riesgoGlobal = desv ? desv.riesgo_actual_global : bt.resultado?.riesgo_actual || 'Bajo'
+    const brechaGlobal = desv ? desv.brecha_maxima : bt.resultado?.brecha || 0
     nodeList.push({
       id: 'topEvent',
       type: 'topEventNode',
-      position: layout['topEvent'] || { x: 550, y: 220 },
+      position: layout['topEvent'] || { x: 550, y: centerY },
       data: {
-        label: bt.evento_tope,
-        riesgoActual: bt.resultado?.riesgo_actual || 'Bajo',
-        brecha: bt.resultado?.brecha || 0,
-        onEdit: () => esAdmin && setBloqueSeleccionado({ tipo: 'topEvent', valor: bt.evento_tope }),
+        label: eventoLabel,
+        riesgoActual: riesgoGlobal,
+        brecha: brechaGlobal,
+        onEdit: () => esAdmin && setBloqueSeleccionado({ tipo: 'topEvent', valor: eventoLabel }),
       },
     })
 
@@ -400,231 +491,220 @@ export const BowTieView: React.FC = () => {
       markerEnd: { type: MarkerType.ArrowClosed },
     })
 
-    // 3. Amenaza (Threat / Causa) - Extremo izquierdo
-    nodeList.push({
-      id: 'threat',
-      type: 'threatNode',
-      position: layout['threat'] || { x: 50, y: 230 },
-      data: {
-        label: bt.causa,
-        frecuencia: bt.frecuencia_diseno,
-        onEdit: () =>
-          esAdmin &&
-          setBloqueSeleccionado({
-            tipo: 'threat',
-            causa: bt.causa,
-            frecuencia: bt.frecuencia_diseno,
-          }),
-      },
-    })
-
-    // 4. Barreras Preventivas (Lado izquierdo)
-    let ultimoNodoPrev = 'threat'
-    bt.preventivas.forEach((b, idx) => {
-      const bId = `prev-${b.tag_activo}`
-      const posDefecto = { x: 260 + idx * 140, y: 230 }
+    // 3 y 4. Ala Izquierda: Amenazas (Causas) y Barreras Preventivas
+    causas.forEach((c, cIdx) => {
+      const yCausa = 100 + cIdx * espaciadoY
+      const threatId = `threat-${c.escenario_id}`
       nodeList.push({
-        id: bId,
-        type: 'preventiveBarrierNode',
-        position: layout[bId] || posDefecto,
+        id: threatId,
+        type: 'threatNode',
+        position: layout[threatId] || { x: 50, y: yCausa },
         data: {
-          tag: b.tag_activo,
-          desc: b.descripcion,
-          estado: b.estado_actual,
-          frrDiseno: b.frr_diseno,
-          frrEfectivo: b.frr_efectivo,
+          label: c.causa,
+          frecuencia: c.frecuencia_diseno,
           onEdit: () =>
             esAdmin &&
             setBloqueSeleccionado({
-              tipo: 'barrier',
-              lado: 'PREVENTIVA',
-              barrera: b,
+              tipo: 'threat',
+              causa: c.causa,
+              frecuencia: c.frecuencia_diseno,
+              escenarioId: c.escenario_id,
             }),
         },
       })
 
-      edgeList.push({
-        id: `e-${ultimoNodoPrev}-${bId}`,
-        source: ultimoNodoPrev,
-        target: bId,
-        animated: b.estado_actual !== 'DISPONIBLE',
-        style: {
-          stroke: b.estado_actual !== 'DISPONIBLE' ? '#dc2626' : '#10b981',
-          strokeWidth: 2,
-        },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })
-      ultimoNodoPrev = bId
-    })
+      let prevId = threatId
+      c.barreras_preventivas.forEach((b, bIdx) => {
+        const bId = `prev-${c.escenario_id}-${b.tag_activo}`
+        nodeList.push({
+          id: bId,
+          type: 'preventiveBarrierNode',
+          position: layout[bId] || { x: 250 + bIdx * 135, y: yCausa },
+          data: {
+            tag: b.tag_activo,
+            desc: b.descripcion,
+            estado: b.estado_actual,
+            frrDiseno: b.frr_diseno,
+            frrEfectivo: b.frr_efectivo,
+            onEdit: () =>
+              esAdmin &&
+              setBloqueSeleccionado({
+                tipo: 'barrier',
+                lado: 'PREVENTIVA',
+                barrera: b,
+                escenarioId: c.escenario_id,
+              }),
+          },
+        })
 
-    // Conectar última barrera preventiva al Evento Tope
-    edgeList.push({
-      id: `e-${ultimoNodoPrev}-topEvent`,
-      source: ultimoNodoPrev,
-      target: 'topEvent',
-      targetHandle: 'left',
-      style: { stroke: '#10b981', strokeWidth: 2.5 },
-      markerEnd: { type: MarkerType.ArrowClosed },
-    })
+        edgeList.push({
+          id: `e-${prevId}-${bId}`,
+          source: prevId,
+          target: bId,
+          animated: b.estado_actual !== 'DISPONIBLE',
+          style: {
+            stroke: b.estado_actual !== 'DISPONIBLE' ? '#dc2626' : '#10b981',
+            strokeWidth: 2,
+          },
+          markerEnd: { type: MarkerType.ArrowClosed },
+        })
+        prevId = bId
 
-    // 5. Barreras Reactivas (Lado derecho)
-    let primerNodoMit = 'topEvent'
-    bt.mitigativas.forEach((b, idx) => {
-      const bId = `mit-${b.tag_activo}`
-      const posDefecto = { x: 860 + idx * 140, y: 230 }
-      nodeList.push({
-        id: bId,
-        type: 'recoveryBarrierNode',
-        position: layout[bId] || posDefecto,
-        data: {
-          tag: b.tag_activo,
-          desc: b.descripcion,
-          estado: b.estado_actual,
-          frrDiseno: b.frr_diseno,
-          frrEfectivo: b.frr_efectivo,
-          onEdit: () =>
-            esAdmin &&
-            setBloqueSeleccionado({
-              tipo: 'barrier',
-              lado: 'MITIGATIVA',
-              barrera: b,
-            }),
-        },
-      })
-
-      edgeList.push({
-        id: `e-${primerNodoMit}-${bId}`,
-        source: primerNodoMit,
-        sourceHandle: primerNodoMit === 'topEvent' ? 'right' : undefined,
-        target: bId,
-        animated: b.estado_actual !== 'DISPONIBLE',
-        style: {
-          stroke: b.estado_actual !== 'DISPONIBLE' ? '#dc2626' : '#10b981',
-          strokeWidth: 2,
-        },
-        markerEnd: { type: MarkerType.ArrowClosed },
-      })
-      primerNodoMit = bId
-    })
-
-    // 6. Consecuencia - Extremo derecho
-    const posConsDefecto = { x: 1160, y: 220 }
-    nodeList.push({
-      id: 'consequence',
-      type: 'consequenceNode',
-      position: layout['consequence'] || posConsDefecto,
-      data: {
-        label: bt.consecuencia,
-        impPersonas: bt.imp_personas,
-        impAmbiente: bt.imp_ambiente,
-        impEconomico: bt.imp_economico,
-        impReputacion: bt.imp_reputacion,
-        onEdit: () =>
-          esAdmin &&
-          setBloqueSeleccionado({
-            tipo: 'consequence',
-            consecuencia: bt.consecuencia,
-            impPersonas: bt.imp_personas,
-            impAmbiente: bt.imp_ambiente,
-            impEconomico: bt.imp_economico,
-            impReputacion: bt.imp_reputacion,
-          }),
-      },
-    })
-
-    edgeList.push({
-      id: `e-${primerNodoMit}-consequence`,
-      source: primerNodoMit,
-      sourceHandle: primerNodoMit === 'topEvent' ? 'right' : undefined,
-      target: 'consequence',
-      style: { stroke: '#f43f5e', strokeWidth: 2.5 },
-      markerEnd: { type: MarkerType.ArrowClosed },
-    })
-
-    // 7 y 8. Factores de Escalamiento y Controles (EF Barriers)
-    // METODOLOGÍA: Escalation Factor -> Control (si existe) -> Barrera primaria
-    bt.factores_escalamiento?.forEach((fe, idx) => {
-      const feId = `fe-${fe.id || idx}`
-      const bTargetId =
-        bt.preventivas.find((p) => p.tag_activo === fe.barrera_tag)
-          ? `prev-${fe.barrera_tag}`
-          : `mit-${fe.barrera_tag}`
-
-      nodeList.push({
-        id: feId,
-        type: 'escalationFactorNode',
-        position: layout[feId] || { x: 120 + idx * 240, y: 430 },
-        data: {
-          label: fe.descripcion,
-          categoria: fe.categoria,
-          onEdit: () =>
-            esAdmin &&
-            setBloqueSeleccionado({
-              tipo: 'escalationFactor',
-              factor: fe,
-            }),
-        },
-      })
-
-      const tieneControles = fe.controles && fe.controles.length > 0
-
-      if (tieneControles) {
-        // Encadenar: Factor -> Control 1 -> Control 2 -> ... -> Barrera
-        let prevNodeId = feId
-        fe.controles.forEach((ctrl, cIdx) => {
-          const ctrlId = `ctrl-${ctrl.id || `${idx}-${cIdx}`}`
+        // Factores de escalamiento vinculados a esta barrera preventiva
+        const fes = c.factores_escalamiento.filter((f) => f.barrera_tag === b.tag_activo)
+        fes.forEach((fe, fIdx) => {
+          const feId = `fe-${c.escenario_id}-${b.tag_activo}-${fIdx}`
           nodeList.push({
-            id: ctrlId,
-            type: 'escalationControlNode',
-            position: layout[ctrlId] || { x: 300 + idx * 240 + cIdx * 160, y: 435 },
+            id: feId,
+            type: 'escalationFactorNode',
+            position: layout[feId] || { x: 250 + bIdx * 135, y: yCausa + 115 },
             data: {
-              label: ctrl.descripcion,
-              tag: ctrl.tag_activo,
-              estado: ctrl.estado_actual,
+              label: fe.descripcion,
+              categoria: fe.categoria,
               onEdit: () =>
                 esAdmin &&
                 setBloqueSeleccionado({
-                  tipo: 'escalationControl',
-                  control: ctrl,
-                  factorId: fe.id,
+                  tipo: 'escalationFactor',
+                  factor: fe,
                 }),
             },
           })
-
-          // Conectar nodo previo (factor o control anterior) con este control
           edgeList.push({
-            id: `e-${prevNodeId}-${ctrlId}`,
-            source: prevNodeId,
-            target: ctrlId,
-            style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+            id: `e-${feId}-${bId}`,
+            source: feId,
+            sourceHandle: 'top',
+            target: bId,
+            targetHandle: 'escalation',
+            style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
             markerEnd: { type: MarkerType.ArrowClosed },
           })
+        })
+      })
 
-          prevNodeId = ctrlId
+      // Conectar la última barrera de esta causa al Evento Tope
+      edgeList.push({
+        id: `e-${prevId}-topEvent`,
+        source: prevId,
+        target: 'topEvent',
+        targetHandle: 'left',
+        style: {
+          stroke: c.barreras_preventivas.length > 0 ? '#10b981' : '#f97316',
+          strokeWidth: 2.5,
+          strokeDasharray: c.barreras_preventivas.length === 0 ? '5 5' : undefined,
+        },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      })
+    })
+
+    // 5 y 6. Ala Derecha: Barreras Mitigativas y Consecuencias
+    consecuencias.forEach((cons, consIdx) => {
+      const yCons = 100 + consIdx * espaciadoY
+      let prevId = 'topEvent'
+
+      cons.barreras_mitigativas.forEach((b, mIdx) => {
+        const bId = `mit-${consIdx}-${b.tag_activo}`
+        nodeList.push({
+          id: bId,
+          type: 'recoveryBarrierNode',
+          position: layout[bId] || { x: 860 + mIdx * 135, y: yCons },
+          data: {
+            tag: b.tag_activo,
+            desc: b.descripcion,
+            estado: b.estado_actual,
+            frrDiseno: b.frr_diseno,
+            frrEfectivo: b.frr_efectivo,
+            onEdit: () =>
+              esAdmin &&
+              setBloqueSeleccionado({
+                tipo: 'barrier',
+                lado: 'MITIGATIVA',
+                barrera: b,
+              }),
+          },
         })
 
-        // Conectar el último control con la barrera principal
         edgeList.push({
-          id: `e-${prevNodeId}-${bTargetId}`,
-          source: prevNodeId,
-          sourceHandle: 'top',
-          target: bTargetId,
-          targetHandle: 'escalation',
-          style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
+          id: `e-${prevId}-${bId}`,
+          source: prevId,
+          sourceHandle: prevId === 'topEvent' ? 'right' : undefined,
+          target: bId,
+          animated: b.estado_actual !== 'DISPONIBLE',
+          style: {
+            stroke: b.estado_actual !== 'DISPONIBLE' ? '#dc2626' : '#10b981',
+            strokeWidth: 2,
+          },
           markerEnd: { type: MarkerType.ArrowClosed },
         })
-      } else {
-        // Si no hay control interpuesto, conecta directamente: Factor -> Barrera
-        edgeList.push({
-          id: `e-${feId}-${bTargetId}`,
-          source: feId,
-          sourceHandle: 'top',
-          target: bTargetId,
-          targetHandle: 'escalation',
-          style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed },
+        prevId = bId
+
+        // Factores de escalamiento vinculados a esta barrera mitigativa
+        const fes = cons.factores_escalamiento.filter((f) => f.barrera_tag === b.tag_activo)
+        fes.forEach((fe, fIdx) => {
+          const feId = `fe-mit-${consIdx}-${b.tag_activo}-${fIdx}`
+          nodeList.push({
+            id: feId,
+            type: 'escalationFactorNode',
+            position: layout[feId] || { x: 860 + mIdx * 135, y: yCons + 115 },
+            data: {
+              label: fe.descripcion,
+              categoria: fe.categoria,
+              onEdit: () =>
+                esAdmin &&
+                setBloqueSeleccionado({
+                  tipo: 'escalationFactor',
+                  factor: fe,
+                }),
+            },
+          })
+          edgeList.push({
+            id: `e-${feId}-${bId}`,
+            source: feId,
+            sourceHandle: 'top',
+            target: bId,
+            targetHandle: 'escalation',
+            style: { stroke: '#eab308', strokeDasharray: '4 4', strokeWidth: 2 },
+            markerEnd: { type: MarkerType.ArrowClosed },
+          })
         })
-      }
+      })
+
+      // Consecuencia final de esta rama
+      const consNodeId = `cons-${consIdx}`
+      const numBarrerasMit = cons.barreras_mitigativas.length
+      const xCons =
+        layout[consNodeId]?.x ||
+        (860 + numBarrerasMit * 135 + (numBarrerasMit > 0 ? 30 : 0))
+      nodeList.push({
+        id: consNodeId,
+        type: 'consequenceNode',
+        position: layout[consNodeId] || { x: xCons, y: yCons },
+        data: {
+          label: cons.consecuencia,
+          impPersonas: cons.imp_personas,
+          impAmbiente: cons.imp_ambiente,
+          impEconomico: cons.imp_economico,
+          impReputacion: cons.imp_reputacion,
+          onEdit: () =>
+            esAdmin &&
+            setBloqueSeleccionado({
+              tipo: 'consequence',
+              consecuencia: cons.consecuencia,
+              impPersonas: cons.imp_personas,
+              impAmbiente: cons.imp_ambiente,
+              impEconomico: cons.imp_economico,
+              impReputacion: cons.imp_reputacion,
+            }),
+        },
+      })
+
+      edgeList.push({
+        id: `e-${prevId}-${consNodeId}`,
+        source: prevId,
+        sourceHandle: prevId === 'topEvent' ? 'right' : undefined,
+        target: consNodeId,
+        style: { stroke: '#f43f5e', strokeWidth: 2.5 },
+        markerEnd: { type: MarkerType.ArrowClosed },
+      })
     })
 
     setNodes(nodeList)
@@ -645,7 +725,7 @@ export const BowTieView: React.FC = () => {
       if (src === 'hazard' && tgt !== 'topEvent') return false
 
       // Regla 2: Amenaza solo conecta a Barrera Preventiva o Evento Tope
-      if (src === 'threat') {
+      if (src.startsWith('threat')) {
         return tgt.startsWith('prev-') || tgt === 'topEvent'
       }
 
@@ -656,12 +736,12 @@ export const BowTieView: React.FC = () => {
 
       // Regla 4: Evento Tope conecta a Barrera Reactiva o Consecuencia
       if (src === 'topEvent') {
-        return tgt.startsWith('mit-') || tgt === 'consequence'
+        return tgt.startsWith('mit-') || tgt.startsWith('cons-') || tgt === 'consequence'
       }
 
       // Regla 5: Barrera Reactiva conecta a otra Barrera Reactiva o Consecuencia
       if (src.startsWith('mit-')) {
-        return tgt.startsWith('mit-') || tgt === 'consequence'
+        return tgt.startsWith('mit-') || tgt.startsWith('cons-') || tgt === 'consequence'
       }
 
       // Regla 6: Factor de Escalamiento conecta a Barrera (preventiva/reactiva) o a Control
@@ -701,6 +781,15 @@ export const BowTieView: React.FC = () => {
     nodes.forEach((n) => {
       layoutMap[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) }
     })
+
+    if (bt.desviacion) {
+      mutacionGuardar.mutate({
+        peligro: bt.desviacion.peligro,
+        evento_tope: bt.desviacion.evento_tope,
+        layout: layoutMap,
+      })
+      return
+    }
 
     const payload = {
       peligro: bt.peligro,
@@ -879,6 +968,11 @@ export const BowTieView: React.FC = () => {
   }
 
   const res = bt.resultado
+  const desv = bt.desviacion
+
+  const riesgoDiseno = desv ? desv.riesgo_diseno_global : res?.riesgo_diseno || 'Bajo'
+  const riesgoActual = desv ? desv.riesgo_actual_global : res?.riesgo_actual || 'Bajo'
+  const brechaMax = desv ? desv.brecha_maxima : res?.brecha || 0
 
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-140px)]">
@@ -886,51 +980,60 @@ export const BowTieView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <Link to="/escenarios" className="text-xs text-brand-600 hover:underline">
-              ← Volver a Escenarios
+            <Link
+              to={`/escenarios?palabra_guia_id=${desv?.desviacion_id || bt.escenario_id}&desviacion_id=${desv?.desviacion_id || bt.escenario_id}`}
+              className="px-2.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <span>←</span>
+              <span>
+                Regresar a Hoja PHA ({desv ? `Desviación: ${desv.palabra_guia}` : `Escenario #${bt.escenario_id}`})
+              </span>
             </Link>
             <span className="text-slate-300 dark:text-slate-700">|</span>
-            <span className="text-xs text-slate-500 font-mono">Escenario #{bt.escenario_id}</span>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-800 dark:text-amber-300">
-              Metodología BowTie 8 Bloques
+              BowTie Unificado por Desviación
             </span>
           </div>
           <h1 className="text-lg font-bold text-slate-900 dark:text-white mt-1">
-            BowTie Dinámico e Interactivo: {bt.causa}
+            BowTie: {desv ? `${desv.palabra_guia} (${desv.nodo})` : bt.causa}
           </h1>
-          <div className="text-xs text-slate-500">{bt.ruta}</div>
+          <div className="text-xs text-slate-500">
+            {desv ? desv.ruta : bt.ruta}
+            {desv && (
+              <span className="ml-2 font-medium text-slate-600 dark:text-slate-400">
+                · {desv.causas.length} Amenaza(s) · {desv.consecuencias.length} Consecuencia(s)
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Resumen del cálculo actual y Botones de Edición */}
         <div className="flex items-center gap-3">
-          {res && (
-            <div className="hidden md:flex items-center gap-3 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-xs">
-              <div>
-                <span className="text-slate-400 block text-[9px]">DISEÑO</span>
-                <span className={`chip text-[10px] ${NIVEL_CLASES[res.riesgo_diseno]}`}>
-                  {res.riesgo_diseno}
-                </span>
-              </div>
-              <div className="text-slate-400 font-black">➔</div>
-              <div>
-                <span className="text-slate-400 block text-[9px]">ACTUAL</span>
-                <span className={`chip text-[10px] ${NIVEL_CLASES[res.riesgo_actual]}`}>
-                  {res.riesgo_actual}
-                </span>
-              </div>
-              <div className="pl-2 border-l border-slate-200 dark:border-slate-700">
-                <span className="text-slate-400 block text-[9px]">BRECHA</span>
-                <span
-                  className={`font-black text-xs ${
-                    res.brecha > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600'
-                  }`}
-                >
-                  {fmtBrecha(res.brecha)}
-                </span>
-              </div>
+          <div className="hidden md:flex items-center gap-3 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm text-xs">
+            <div>
+              <span className="text-slate-400 block text-[9px]">DISEÑO</span>
+              <span className={`chip text-[10px] ${NIVEL_CLASES[riesgoDiseno]}`}>
+                {riesgoDiseno}
+              </span>
             </div>
-          )}
+            <div className="text-slate-400 font-black">➔</div>
+            <div>
+              <span className="text-slate-400 block text-[9px]">ACTUAL</span>
+              <span className={`chip text-[10px] ${NIVEL_CLASES[riesgoActual]}`}>
+                {riesgoActual}
+              </span>
+            </div>
+            <div className="pl-2 border-l border-slate-200 dark:border-slate-700">
+              <span className="text-slate-400 block text-[9px]">BRECHA MÁX.</span>
+              <span
+                className={`font-black text-xs ${
+                  brechaMax > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600'
+                }`}
+              >
+                {fmtBrecha(brechaMax)}
+              </span>
+            </div>
+          </div>
 
           {esAdmin && (
             <div className="flex items-center gap-2">

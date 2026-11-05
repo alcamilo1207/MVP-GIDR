@@ -20,11 +20,16 @@ from app.models import (
     EscenarioBarrera,
     EstadoBarreraHist,
     FactorEscalamiento,
+    Nodo,
     PalabraGuia,
+    Unidad,
 )
 from app.schemas import (
     BarreraEscenarioOut,
+    BowTieCausaRama,
     BowTieCompletoOut,
+    BowTieConsecuenciaRama,
+    BowTieDesviacionOut,
     BowTieGuardarIn,
     CeldaMapa,
     ConsecuenciaBowTie,
@@ -73,7 +78,7 @@ def resumen(db: DbSession, _: Usuario_, site_id: int | None = None, unidad_id: i
             prio.append(EscenarioPriorizado(
                 escenario_id=esc.id, causa=esc.causa, unidad=uni.nombre, nodo=nodo.nombre,
                 riesgo_diseno=r.riesgo_diseno, riesgo_actual=r.riesgo_actual, brecha=r.brecha,
-                puntaje_actual=r.puntaje_actual))
+                puntaje_actual=r.puntaje_actual, recomendacion=esc.recomendacion))
     prio.sort(key=lambda x: (-x.brecha, -x.puntaje_actual))
     mapa = [
         CeldaMapa(frecuencia=f, severidad=s, nivel=matriz[(i, s)], diseno=diseno[(f, s)], actual=actual[(f, s)])
@@ -226,49 +231,313 @@ def _obtener_factores_escalamiento(db: DbSession, escenario_id: int) -> list[Fac
     return resultado
 
 
-@router.get("/bowtie/{escenario_id}", response_model=BowTieCompletoOut)
-def bowtie(escenario_id: int, db: DbSession, _: Usuario_) -> BowTieCompletoOut:
-    fila = _fila(db, escenario_id)
-    if fila is None:  # pragma: no cover
-        raise no_encontrado("Escenario", escenario_id)
-    esc_modelo: Escenario = fila[0]
-    esc = a_escenario_out(fila)
-    barreras = _detalle_barreras(db, escenario_id)
-    cats = [
-        ("Personas", esc.imp_personas),
-        ("Ambiente", esc.imp_ambiente),
-        ("Económico", esc.imp_economico),
-        ("Reputación", esc.imp_reputacion),
-    ]
-    cons = [
-        ConsecuenciaBowTie(categoria=n, nivel=v, texto=esc.consecuencia)
-        for n, v in sorted(cats, key=lambda x: -x[1])
-        if v >= 3
-    ] or [ConsecuenciaBowTie(categoria="General", nivel=max(v for _, v in cats), texto=esc.consecuencia)]
+def _construir_bowtie_desviacion(
+    db: DbSession, palabra_guia_id: int, escenario_seleccionado_id: int | None = None
+) -> BowTieDesviacionOut:
+    pg = db.get(PalabraGuia, palabra_guia_id)
+    if pg is None:
+        raise no_encontrado("PalabraGuia", palabra_guia_id)
+    nodo = db.get(Nodo, pg.nodo_id)
+    unidad = db.get(Unidad, nodo.unidad_id) if nodo else None
+    site_nombre = unidad.site.nombre if unidad and unidad.site else "Site"
 
-    peligro = esc_modelo.peligro or f"Peligro inherente en {esc.nodo}: Presencia de fluidos y energía de proceso"
-    evento_tope = esc_modelo.evento_tope or f"{esc.palabra_guia} en {esc.nodo} (Pérdida de contención)"
-    factores = _obtener_factores_escalamiento(db, escenario_id)
+    # Obtener todas las filas de escenarios de esta palabra guía
+    todas_filas = db.execute(consulta_escenarios()).all()
+    filas_pg = [f for f in todas_filas if f[0].palabra_guia_id == palabra_guia_id]
+    if not filas_pg:
+        peligro_def = f"Peligro inherente en {nodo.nombre if nodo else 'Nodo'}: Presencia de fluidos y energía de proceso"
+        evento_def = f"{pg.nombre} en {nodo.nombre if nodo else 'Nodo'} (Pérdida de contención)"
+        return BowTieDesviacionOut(
+            desviacion_id=pg.id,
+            nodo_id=pg.nodo_id,
+            nodo=nodo.nombre if nodo else "Nodo",
+            unidad_id=unidad.id if unidad else 0,
+            unidad=unidad.nombre if unidad else "Unidad",
+            site=site_nombre,
+            palabra_guia=pg.nombre,
+            peligro=peligro_def,
+            evento_tope=evento_def,
+            ruta=f"{site_nombre} / {unidad.nombre if unidad else ''} / {nodo.nombre if nodo else ''} / {pg.nombre}",
+            riesgo_diseno_global="Bajo",
+            riesgo_actual_global="Bajo",
+            brecha_maxima=0.0,
+            causas=[],
+            consecuencias=[],
+            escenario_seleccionado_id=escenario_seleccionado_id,
+            layout=None,
+        )
 
-    return BowTieCompletoOut(
-        escenario_id=escenario_id,
+    # Peligro y Evento Tope común a nivel desviación
+    peligro = next((f[0].peligro for f in filas_pg if f[0].peligro), None) or (
+        f"Peligro inherente en {nodo.nombre if nodo else 'Nodo'}: Presencia de fluidos y energía de proceso"
+    )
+    evento_tope = next((f[0].evento_tope for f in filas_pg if f[0].evento_tope), None) or (
+        f"{pg.nombre} en {nodo.nombre if nodo else 'Nodo'} (Pérdida de contención)"
+    )
+    layout = next((f[0].bowtie_layout for f in filas_pg if f[0].bowtie_layout), None)
+
+    causas_ramas: list[BowTieCausaRama] = []
+    consecuencias_map: dict[str, dict[str, Any]] = {}
+
+    orden_nivel = {"Extremo": 4, "Alto": 3, "Medio": 2, "Bajo": 1}
+    max_riesgo_diseno_val = 1
+    max_riesgo_actual_val = 1
+    max_brecha = 0.0
+
+    for fila in filas_pg:
+        esc_m: Escenario = fila[0]
+        esc_out = a_escenario_out(fila)
+        barreras_todas = _detalle_barreras(db, esc_m.id)
+        factores_todos = _obtener_factores_escalamiento(db, esc_m.id)
+
+        prev = [b for b in barreras_todas if b.lado == "PREVENTIVA"]
+        mit = [b for b in barreras_todas if b.lado == "MITIGATIVA"]
+        tags_prev = {b.tag_activo for b in prev}
+        tags_mit = {b.tag_activo for b in mit}
+
+        res = esc_out.resultado
+        r_dis = res.riesgo_diseno if res else "Bajo"
+        r_act = res.riesgo_actual if res else "Bajo"
+        brecha_val = float(res.brecha) if res else 0.0
+
+        if orden_nivel.get(r_dis, 1) > max_riesgo_diseno_val:
+            max_riesgo_diseno_val = orden_nivel.get(r_dis, 1)
+        if orden_nivel.get(r_act, 1) > max_riesgo_actual_val:
+            max_riesgo_actual_val = orden_nivel.get(r_act, 1)
+        if brecha_val > max_brecha:
+            max_brecha = brecha_val
+
+        frec_act = res.frecuencia_actual if res else esc_m.frecuencia_diseno
+
+        causas_ramas.append(
+            BowTieCausaRama(
+                escenario_id=esc_m.id,
+                causa=esc_m.causa,
+                frecuencia_diseno=esc_m.frecuencia_diseno,
+                frecuencia_actual=frec_act,
+                recomendacion=esc_m.recomendacion,
+                rec_prioridad=esc_m.rec_prioridad or "Medium",
+                rec_responsable=esc_m.rec_responsable,
+                rec_estado=esc_m.rec_estado or "Proposed",
+                rec_comentarios=esc_m.rec_comentarios,
+                riesgo_diseno=r_dis,
+                riesgo_actual=r_act,
+                brecha=brecha_val,
+                barreras_preventivas=prev,
+                factores_escalamiento=[f for f in factores_todos if f.barrera_tag in tags_prev],
+                resultado=res,
+            )
+        )
+
+        cons_key = esc_m.consecuencia.strip()
+        if cons_key not in consecuencias_map:
+            consecuencias_map[cons_key] = {
+                "consecuencia": esc_m.consecuencia,
+                "imp_economico": esc_m.imp_economico,
+                "imp_personas": esc_m.imp_personas,
+                "imp_ambiente": esc_m.imp_ambiente,
+                "imp_reputacion": esc_m.imp_reputacion,
+                "escenario_ids": [esc_m.id],
+                "barreras_mit": {b.tag_activo: b for b in mit},
+                "factores_mit": {f.id: f for f in factores_todos if f.barrera_tag in tags_mit},
+            }
+        else:
+            c_info = consecuencias_map[cons_key]
+            c_info["escenario_ids"].append(esc_m.id)
+            c_info["imp_economico"] = max(c_info["imp_economico"], esc_m.imp_economico)
+            c_info["imp_personas"] = max(c_info["imp_personas"], esc_m.imp_personas)
+            c_info["imp_ambiente"] = max(c_info["imp_ambiente"], esc_m.imp_ambiente)
+            c_info["imp_reputacion"] = max(c_info["imp_reputacion"], esc_m.imp_reputacion)
+            for b in mit:
+                c_info["barreras_mit"][b.tag_activo] = b
+            for f in factores_todos:
+                if f.barrera_tag in tags_mit:
+                    c_info["factores_mit"][f.id] = f
+
+    consecuencias_ramas: list[BowTieConsecuenciaRama] = []
+    for c_info in consecuencias_map.values():
+        sev_max = max(
+            c_info["imp_economico"],
+            c_info["imp_personas"],
+            c_info["imp_ambiente"],
+            c_info["imp_reputacion"],
+        )
+        consecuencias_ramas.append(
+            BowTieConsecuenciaRama(
+                consecuencia=c_info["consecuencia"],
+                severidad_max=sev_max,
+                imp_economico=c_info["imp_economico"],
+                imp_personas=c_info["imp_personas"],
+                imp_ambiente=c_info["imp_ambiente"],
+                imp_reputacion=c_info["imp_reputacion"],
+                escenario_ids=c_info["escenario_ids"],
+                barreras_mitigativas=list(c_info["barreras_mit"].values()),
+                factores_escalamiento=list(c_info["factores_mit"].values()),
+            )
+        )
+
+    val_a_nivel = {4: "Extremo", 3: "Alto", 2: "Medio", 1: "Bajo"}
+    r_dis_global = val_a_nivel.get(max_riesgo_diseno_val, "Bajo")
+    r_act_global = val_a_nivel.get(max_riesgo_actual_val, "Bajo")
+
+    return BowTieDesviacionOut(
+        desviacion_id=pg.id,
+        nodo_id=pg.nodo_id,
+        nodo=nodo.nombre if nodo else "Nodo",
+        unidad_id=unidad.id if unidad else 0,
+        unidad=unidad.nombre if unidad else "Unidad",
+        site=site_nombre,
+        palabra_guia=pg.nombre,
         peligro=peligro,
         evento_tope=evento_tope,
-        causa=esc.causa,
-        frecuencia_diseno=esc.frecuencia_diseno,
-        consecuencia=esc.consecuencia,
-        ruta=f"{esc.site} / {esc.unidad} / {esc.nodo} / {esc.palabra_guia}",
-        imp_economico=esc.imp_economico,
-        imp_personas=esc.imp_personas,
-        imp_ambiente=esc.imp_ambiente,
-        imp_reputacion=esc.imp_reputacion,
-        preventivas=[b for b in barreras if b.lado == "PREVENTIVA"],
-        mitigativas=[b for b in barreras if b.lado == "MITIGATIVA"],
-        consecuencias=cons,
-        factores_escalamiento=factores,
-        resultado=esc.resultado,
-        layout=esc_modelo.bowtie_layout,
+        ruta=f"{site_nombre} / {unidad.nombre if unidad else ''} / {nodo.nombre if nodo else ''} / {pg.nombre}",
+        riesgo_diseno_global=r_dis_global,
+        riesgo_actual_global=r_act_global,
+        brecha_maxima=max_brecha,
+        causas=causas_ramas,
+        consecuencias=consecuencias_ramas,
+        escenario_seleccionado_id=escenario_seleccionado_id,
+        layout=layout,
     )
+
+
+class BowTieDesviacionGuardarIn(BaseModel):
+    peligro: str | None = None
+    evento_tope: str | None = None
+    layout: dict[str, Any] | None = None
+
+
+@router.get("/bowtie/desviacion/{palabra_guia_id}", response_model=BowTieDesviacionOut)
+def bowtie_desviacion(palabra_guia_id: int, db: DbSession, _: Usuario_) -> BowTieDesviacionOut:
+    return _construir_bowtie_desviacion(db, palabra_guia_id)
+
+
+@router.put("/bowtie/desviacion/{palabra_guia_id}", response_model=BowTieDesviacionOut)
+def guardar_bowtie_desviacion(
+    palabra_guia_id: int, datos: BowTieDesviacionGuardarIn, db: DbSession, p: Admin
+) -> BowTieDesviacionOut:
+    pg = db.get(PalabraGuia, palabra_guia_id)
+    if pg is None:
+        raise no_encontrado("PalabraGuia", palabra_guia_id)
+
+    escenarios = db.scalars(select(Escenario).where(Escenario.palabra_guia_id == palabra_guia_id)).all()
+    for esc in escenarios:
+        if datos.peligro:
+            esc.peligro = datos.peligro
+        if datos.evento_tope:
+            esc.evento_tope = datos.evento_tope
+        if datos.layout is not None:
+            esc.bowtie_layout = datos.layout
+
+    db.commit()
+    return _construir_bowtie_desviacion(db, palabra_guia_id)
+
+
+@router.get("/bowtie/{escenario_id}", response_model=BowTieCompletoOut)
+def bowtie(escenario_id: int, db: DbSession, _: Usuario_, tipo: str | None = None) -> BowTieCompletoOut:
+    if tipo == "desviacion":
+        pg = db.get(PalabraGuia, escenario_id)
+        if pg is not None:
+            desv = _construir_bowtie_desviacion(db, pg.id)
+            primer_esc = db.scalars(select(Escenario).where(Escenario.palabra_guia_id == pg.id)).first()
+            esc_id = primer_esc.id if primer_esc else 0
+            primera_causa = desv.causas[0] if desv.causas else None
+            primera_cons = desv.consecuencias[0] if desv.consecuencias else None
+            return BowTieCompletoOut(
+                escenario_id=esc_id,
+                peligro=desv.peligro,
+                evento_tope=desv.evento_tope,
+                causa=primera_causa.causa if primera_causa else "Sin causas registradas",
+                frecuencia_diseno=primera_causa.frecuencia_diseno if primera_causa else "C",
+                consecuencia=primera_cons.consecuencia if primera_cons else "Sin consecuencias",
+                ruta=desv.ruta,
+                imp_economico=primera_cons.imp_economico if primera_cons else 3,
+                imp_personas=primera_cons.imp_personas if primera_cons else 3,
+                imp_ambiente=primera_cons.imp_ambiente if primera_cons else 3,
+                imp_reputacion=primera_cons.imp_reputacion if primera_cons else 3,
+                preventivas=primera_causa.barreras_preventivas if primera_causa else [],
+                mitigativas=primera_cons.barreras_mitigativas if primera_cons else [],
+                consecuencias=[],
+                factores_escalamiento=[],
+                resultado=primera_causa.resultado if primera_causa else None,
+                layout=desv.layout,
+                desviacion=desv,
+            )
+
+    fila = _fila(db, escenario_id)
+    if fila is not None:
+        esc_modelo: Escenario = fila[0]
+        esc = a_escenario_out(fila)
+        barreras = _detalle_barreras(db, escenario_id)
+        cats = [
+            ("Personas", esc.imp_personas),
+            ("Ambiente", esc.imp_ambiente),
+            ("Económico", esc.imp_economico),
+            ("Reputación", esc.imp_reputacion),
+        ]
+        cons = [
+            ConsecuenciaBowTie(categoria=n, nivel=v, texto=esc.consecuencia)
+            for n, v in sorted(cats, key=lambda x: -x[1])
+            if v >= 3
+        ] or [ConsecuenciaBowTie(categoria="General", nivel=max(v for _, v in cats), texto=esc.consecuencia)]
+
+        peligro = esc_modelo.peligro or f"Peligro inherente en {esc.nodo}: Presencia de fluidos y energía de proceso"
+        evento_tope = esc_modelo.evento_tope or f"{esc.palabra_guia} en {esc.nodo} (Pérdida de contención)"
+        factores = _obtener_factores_escalamiento(db, escenario_id)
+        desv = _construir_bowtie_desviacion(db, esc_modelo.palabra_guia_id, escenario_seleccionado_id=escenario_id)
+
+        return BowTieCompletoOut(
+            escenario_id=escenario_id,
+            peligro=peligro,
+            evento_tope=evento_tope,
+            recomendacion=esc_modelo.recomendacion,
+            causa=esc.causa,
+            frecuencia_diseno=esc.frecuencia_diseno,
+            consecuencia=esc.consecuencia,
+            ruta=f"{esc.site} / {esc.unidad} / {esc.nodo} / {esc.palabra_guia}",
+            imp_economico=esc.imp_economico,
+            imp_personas=esc.imp_personas,
+            imp_ambiente=esc.imp_ambiente,
+            imp_reputacion=esc.imp_reputacion,
+            preventivas=[b for b in barreras if b.lado == "PREVENTIVA"],
+            mitigativas=[b for b in barreras if b.lado == "MITIGATIVA"],
+            consecuencias=cons,
+            factores_escalamiento=factores,
+            resultado=esc.resultado,
+            layout=esc_modelo.bowtie_layout,
+            desviacion=desv,
+        )
+
+    # Si no es escenario_id, verificar si es palabra_guia_id (desviación directa)
+    pg = db.get(PalabraGuia, escenario_id)
+    if pg is not None:
+        desv = _construir_bowtie_desviacion(db, pg.id)
+        primer_esc = db.scalars(select(Escenario).where(Escenario.palabra_guia_id == pg.id)).first()
+        esc_id = primer_esc.id if primer_esc else 0
+        primera_causa = desv.causas[0] if desv.causas else None
+        primera_cons = desv.consecuencias[0] if desv.consecuencias else None
+        return BowTieCompletoOut(
+            escenario_id=esc_id,
+            peligro=desv.peligro,
+            evento_tope=desv.evento_tope,
+            causa=primera_causa.causa if primera_causa else "Sin causas registradas",
+            frecuencia_diseno=primera_causa.frecuencia_diseno if primera_causa else "C",
+            consecuencia=primera_cons.consecuencia if primera_cons else "Sin consecuencias",
+            ruta=desv.ruta,
+            imp_economico=primera_cons.imp_economico if primera_cons else 3,
+            imp_personas=primera_cons.imp_personas if primera_cons else 3,
+            imp_ambiente=primera_cons.imp_ambiente if primera_cons else 3,
+            imp_reputacion=primera_cons.imp_reputacion if primera_cons else 3,
+            preventivas=primera_causa.barreras_preventivas if primera_causa else [],
+            mitigativas=primera_cons.barreras_mitigativas if primera_cons else [],
+            consecuencias=[],
+            factores_escalamiento=[],
+            resultado=primera_causa.resultado if primera_causa else None,
+            layout=desv.layout,
+            desviacion=desv,
+        )
+
+    raise no_encontrado("Escenario / Desviación", escenario_id)
 
 
 @router.put("/bowtie/{escenario_id}", response_model=BowTieCompletoOut)
@@ -323,6 +592,16 @@ def guardar_bowtie(
     esc.imp_personas = datos.imp_personas
     esc.imp_ambiente = datos.imp_ambiente
     esc.imp_reputacion = datos.imp_reputacion
+    if datos.recomendacion is not None:
+        esc.recomendacion = datos.recomendacion
+    if datos.rec_prioridad is not None:
+        esc.rec_prioridad = datos.rec_prioridad
+    if datos.rec_responsable is not None:
+        esc.rec_responsable = datos.rec_responsable
+    if datos.rec_estado is not None:
+        esc.rec_estado = datos.rec_estado
+    if datos.rec_comentarios is not None:
+        esc.rec_comentarios = datos.rec_comentarios
     if datos.layout is not None:
         esc.bowtie_layout = datos.layout
     esc.version += 1

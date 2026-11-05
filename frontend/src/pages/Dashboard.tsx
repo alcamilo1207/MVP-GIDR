@@ -300,7 +300,7 @@ export const Dashboard: React.FC = () => {
                 {resumen.priorizados.map((p) => (
                   <Link
                     key={p.escenario_id}
-                    to={`/bowtie/${p.escenario_id}`}
+                    to={`/escenarios?escenario_id=${p.escenario_id}&enfocar=recomendacion`}
                     className="block p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-brand-500 dark:hover:border-brand-500 bg-slate-50/50 dark:bg-slate-800/40 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -331,7 +331,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-3 text-xs text-slate-500 flex items-center justify-between">
-            <span>Haz clic en un escenario para ver su BowTie interactivo.</span>
+            <span>Haz clic en un escenario para ver su Recomendación PHA.</span>
           </div>
         </div>
       </div>
