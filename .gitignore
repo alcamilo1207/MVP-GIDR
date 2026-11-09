@@ -10,3 +10,5 @@ dist/
 .coverage
 *.db
 .tools/
+.DS_Store
+

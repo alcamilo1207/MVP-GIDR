@@ -6,7 +6,56 @@ import { useAuth } from '../context/AuthContext'
 import type { Escenario, Pagina, Unidad } from '../lib/types'
 import { ESTADOS, ESTADO_ETIQUETA } from '../lib/format'
 
-const FRECUENCIAS = ['A', 'B', 'C', 'D', 'E'] as const
+export const FRECUENCIAS = ['A', 'B', 'C', 'D', 'E'] as const
+
+/** Valores cuantitativos semicuantitativos estándar (CCPS / LOPA / IEC 61511) */
+export const FREC_CUANTITATIVA: Record<
+  string,
+  { cuant: string; desc: string; rango: string }
+> = {
+  A: { cuant: '> 10⁻¹', desc: 'Frecuente (> 1 evento/10 años)', rango: '> 10⁻¹ año⁻¹' },
+  B: { cuant: '10⁻²', desc: 'Probable (1 evento/10 - 100 años)', rango: '10⁻² - 10⁻¹ año⁻¹' },
+  C: { cuant: '10⁻³', desc: 'Ocasional (1 evento/100 - 1,000 años)', rango: '10⁻³ - 10⁻² año⁻¹' },
+  D: { cuant: '10⁻⁴', desc: 'Raro (1 evento/1,000 - 10,000 años)', rango: '10⁻⁴ - 10⁻³ año⁻¹' },
+  E: { cuant: '< 10⁻⁴', desc: 'Improbable (< 1 evento/10,000 años)', rango: '< 10⁻⁴ año⁻¹' },
+}
+
+/**
+ * Convierte un valor numérico de frecuencia (año⁻¹) a su categoría en letra (A-E)
+ * según el estándar semicuantitativo CCPS / LOPA / IEC 61511:
+ *   >= 0.1         -> A (ej. 0.3, 0.98, 1.0)
+ *   0.01 a 0.1     -> B (ej. 0.05, 0.02)
+ *   0.001 a 0.01   -> C (ej. 0.001, 0.005)
+ *   0.0001 a 0.001 -> D (ej. 0.0002, 0.0005)
+ *   < 0.0001      -> E (ej. 0.00001)
+ */
+export function frecuenciaNumeroALetra(val: number): 'A' | 'B' | 'C' | 'D' | 'E' {
+  if (isNaN(val) || val <= 0) return 'C'
+  if (val >= 0.1) return 'A'
+  if (val >= 0.01) return 'B'
+  if (val >= 0.001) return 'C'
+  if (val >= 0.0001) return 'D'
+  return 'E'
+}
+
+export function frecuenciaLetraANumero(letra: string): number {
+  switch (letra?.toUpperCase()) {
+    case 'A': return 0.1
+    case 'B': return 0.01
+    case 'C': return 0.001
+    case 'D': return 0.0001
+    case 'E': return 0.00001
+    default: return 0.001
+  }
+}
+
+export function formatearFrecuenciaCuantitativa(n: number): string {
+  if (isNaN(n) || n <= 0) return '0'
+  if (n >= 1) return Number(n.toFixed(2)).toString()
+  if (n >= 0.01) return Number(n.toFixed(3)).toString()
+  if (n >= 0.0001) return Number(n.toFixed(4)).toString()
+  return n.toExponential(1).replace('+', '')
+}
 
 // --- Motor de cálculo reactivo en cliente (espejo de backend/app/domain/engine/core.py) ---
 const ORDEN_FREC = ['E', 'D', 'C', 'B', 'A'] as const
@@ -106,6 +155,7 @@ interface EscenarioEditable {
   evento_tope: string
   causa: string
   frecuencia_diseno: string
+  frecuencia_diseno_num?: string
   consecuencia: string
   recomendacion: string
   rec_prioridad?: string
@@ -169,6 +219,11 @@ function crearBorrador(e: Escenario): EscenarioEditable {
       e.evento_tope || `${e.palabra_guia} en ${e.nodo} (Pérdida de contención)`,
     causa: e.causa,
     frecuencia_diseno: e.frecuencia_diseno,
+    frecuencia_diseno_num:
+      typeof window !== 'undefined'
+        ? localStorage.getItem(`gidr_frec_num_${e.id}`) ||
+          frecuenciaLetraANumero(e.frecuencia_diseno).toString()
+        : frecuenciaLetraANumero(e.frecuencia_diseno).toString(),
     consecuencia: e.consecuencia,
     recomendacion: e.recomendacion || '',
     rec_prioridad: e.rec_prioridad || 'Medium',
@@ -186,6 +241,13 @@ function crearBorrador(e: Escenario): EscenarioEditable {
 }
 
 function evaluarBorrador(d: EscenarioEditable) {
+  const numDis =
+    d.frecuencia_diseno_num !== undefined &&
+    d.frecuencia_diseno_num !== '' &&
+    !isNaN(Number(d.frecuencia_diseno_num))
+      ? Number(d.frecuencia_diseno_num)
+      : frecuenciaLetraANumero(d.frecuencia_diseno)
+
   const idxBase = Math.max(0, ORDEN_FREC.indexOf(d.frecuencia_diseno as typeof ORDEN_FREC[number]))
 
   let prodPrevDiseno = 1.0
@@ -211,8 +273,12 @@ function evaluarBorrador(d: EscenarioEditable) {
   const idxPrevDis = reducirIndice(idxBase, prodPrevDiseno)
   const idxDisFinal = reducirIndice(idxPrevDis, prodMitDiseno)
 
-  const idxPrevAct = reducirIndice(idxBase, prodPrevActual)
-  const frecActualCausa = ORDEN_FREC[idxPrevAct]
+  // Cálculo cuantitativo dinámico de frecuencia actual
+  const frecActNum = numDis / Math.max(1.0, prodPrevActual)
+  const frecActualLetra = frecuenciaNumeroALetra(frecActNum)
+  const frecActualDisplay = formatearFrecuenciaCuantitativa(frecActNum)
+
+  const idxPrevAct = Math.max(0, ORDEN_FREC.indexOf(frecActualLetra))
   const idxActFinal = reducirIndice(idxPrevAct, prodMitActual)
 
   const severidadMax = Math.max(
@@ -223,7 +289,9 @@ function evaluarBorrador(d: EscenarioEditable) {
   )
 
   return {
-    frecuencia_actual: frecActualCausa,
+    frecuencia_actual: frecActualLetra,
+    frecuencia_actual_num: frecActNum,
+    frecuencia_actual_display: frecActualDisplay,
     riesgo_diseno_global: nivelMatriz(idxDisFinal, severidadMax),
     riesgo_actual_global: nivelMatriz(idxActFinal, severidadMax),
     riesgo_diseno_imp: {
@@ -333,14 +401,36 @@ export function Escenarios() {
     })
   }, [qs.data])
 
-  // Desplazamiento y enfoque automático hacia la celda de recomendación cuando viene de la URL
+  // Desplazamiento y enfoque automático hacia el escenario (inicio de la fila) cuando viene de la URL
   useEffect(() => {
     if (!escenarioIdParam) return
     setEscenarioEnfocado(escenarioIdParam)
+
+    if (qs.data?.items?.length) {
+      const escEncontrado = qs.data.items.find((e) => e.id === escenarioIdParam)
+      if (escEncontrado) {
+        setSeleccion({
+          celdaId: `causa-${escEncontrado.id}`,
+          escenarioId: escEncontrado.id,
+          barreraIdx: (escEncontrado.barreras?.length ?? 0) > 0 ? 0 : null,
+          desviacionKey: `${escEncontrado.nodo_id}::${escEncontrado.palabra_guia_id}`,
+          consecuenciaKey: `${escEncontrado.nodo_id}::${escEncontrado.palabra_guia_id}::${escEncontrado.consecuencia.trim()}`,
+        })
+      }
+    }
+
     const timer = setTimeout(() => {
-      const el = document.getElementById(`recomendacion-${escenarioIdParam}`)
+      // 1. Centrar verticalmente en la fila o causa del escenario (inicio de la fila)
+      const el =
+        document.getElementById(`fila-escenario-${escenarioIdParam}`) ||
+        document.getElementById(`causa-${escenarioIdParam}`)
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      // 2. Desplazar el contenedor horizontalmente a la izquierda (inicio de la fila)
+      const container = document.getElementById('tabla-escenarios-container')
+      if (container) {
+        container.scrollTo({ left: 0, behavior: 'smooth' })
       }
     }, 350)
     return () => clearTimeout(timer)
@@ -872,7 +962,7 @@ export function Escenarios() {
             filas.push(
               [
                 d.nodo, `${d.numDesv} ${d.palabra_guia}`, `${c.numCons} ${c.consecuencia}`,
-                `${ca.numCausa} ${ca.causa}`, ca.frecuencia_diseno,
+                `${ca.numCausa} ${ca.causa}`, `${ca.frecuencia_diseno_num || FREC_CUANTITATIVA[ca.frecuencia_diseno]?.cuant || ca.frecuencia_diseno} (${ca.frecuencia_diseno})`,
                 b?.descripcion ?? '', b?.rol ?? '', b?.tag_activo ?? '', b?.frr_diseno ?? '',
                 b?.estado_actual ?? '', b?.factor_degradacion ?? '',
                 b ? calcFrrActual(b.frr_diseno, b.estado_actual, b.factor_degradacion) : '',
@@ -897,8 +987,8 @@ export function Escenarios() {
 
   const celdaActivaClass = (id: string) =>
     seleccionActiva?.celdaId === id
-      ? 'ring-2 ring-inset ring-[#1e4e79] dark:ring-sky-500 bg-[#eef5fc] dark:bg-slate-800'
-      : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+      ? 'ring-2 ring-inset ring-[#1e4e79] dark:ring-sky-500 bg-sky-100/70 dark:bg-slate-800'
+      : 'hover:bg-sky-100/40 dark:hover:bg-slate-800/40'
 
   return (
     <div className="space-y-2">
@@ -1119,7 +1209,7 @@ export function Escenarios() {
         </div>
 
         {/* Tabla estilo hoja de cálculo PHA-Pro con celdas combinadas (rowSpan) */}
-        <div className="overflow-x-auto max-h-[calc(100vh-205px)]">
+        <div id="tabla-escenarios-container" className="overflow-x-auto max-h-[calc(100vh-205px)]">
           <table className="w-full min-w-[1940px] border-collapse text-[12px] leading-snug text-slate-800 dark:text-slate-200 select-none">
             <thead className="sticky top-0 z-20 bg-[#f1f3f6] dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold">
               {/* Nivel 1 de Cabecera */}
@@ -1146,6 +1236,14 @@ export function Escenarios() {
                 >
                   Recomendaciones PHA
                 </th>
+                <th
+                  rowSpan={3}
+                  className="border border-slate-300 dark:border-slate-700 px-2 py-1.5 text-center w-[130px] min-w-[120px] bg-[#ebedf0] dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+                >
+                  Gestión de
+                  <br />
+                  Riesgos
+                </th>
               </tr>
 
               {/* Nivel 2 de Cabecera */}
@@ -1171,10 +1269,13 @@ export function Escenarios() {
                 </th>
                 <th
                   rowSpan={2}
-                  title="Frecuencia de ocurrencia actual calculada por causa"
-                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[52px] min-w-[52px] bg-[#ebedf0] dark:bg-slate-800"
+                  title="Frecuencia cuantitativa actual calculada (año⁻¹) y categoría (A-E)"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[64px] min-w-[60px] bg-[#ebedf0] dark:bg-slate-800"
                 >
                   F<sub>act</sub>
+                  <div className="text-[9px] font-normal text-slate-500 dark:text-slate-400">
+                    año⁻¹
+                  </div>
                 </th>
                 <th
                   rowSpan={2}
@@ -1200,10 +1301,13 @@ export function Escenarios() {
                   Causa
                 </th>
                 <th
-                  title="Frecuencia de ocurrencia de diseño (A-E)"
-                  className="border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center w-[68px] min-w-[68px] bg-[#f5f6f8] dark:bg-slate-800/80"
+                  title="Frecuencia cuantitativa de diseño (año⁻¹) y categoría (A-E)"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[74px] min-w-[70px] bg-[#f5f6f8] dark:bg-slate-800/80"
                 >
                   F<sub>dis</sub>
+                  <div className="text-[9px] font-normal text-slate-500 dark:text-slate-400">
+                    año⁻¹
+                  </div>
                 </th>
                 <th className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center w-[210px] min-w-[185px] bg-[#f5f6f8] dark:bg-slate-800/80">
                   Salvaguarda / Barrera
@@ -1292,8 +1396,11 @@ export function Escenarios() {
             </thead>
 
             <tbody>
-              {jerarquia.flatMap((grupoDesv) =>
-                grupoDesv.consecuencias.flatMap((grupoCons, consIdx) =>
+              {jerarquia.flatMap((grupoDesv) => {
+                const esDesviacionSeleccionada =
+                  seleccionActiva?.desviacionKey === grupoDesv.desviacionKey
+
+                return grupoDesv.consecuencias.flatMap((grupoCons, consIdx) =>
                   grupoCons.causas.flatMap((causaEsc, causaIdx) => {
                     const calc = evaluarBorrador(causaEsc)
                     const barreras =
@@ -1321,10 +1428,30 @@ export function Escenarios() {
                         })
                       }
 
+                      const esFilaEnfocada = causaEsc.id === escenarioEnfocado
+
                       return (
                         <tr
                           key={`${causaEsc.id}-b-${bIdx}`}
-                          className="align-top bg-white dark:bg-slate-900"
+                          id={bIdx === 0 ? `fila-escenario-${causaEsc.id}` : undefined}
+                          onClick={() => {
+                            if (seleccionActiva?.desviacionKey !== grupoDesv.desviacionKey) {
+                              setSeleccion({
+                                celdaId: `causa-${causaEsc.id}`,
+                                escenarioId: causaEsc.id,
+                                barreraIdx: barrera ? bIdx : null,
+                                desviacionKey: grupoDesv.desviacionKey,
+                                consecuenciaKey: grupoCons.consecuenciaKey,
+                              })
+                            }
+                          }}
+                          className={`align-top transition-colors ${
+                            esFilaEnfocada
+                              ? 'bg-amber-100/90 dark:bg-amber-950/70 ring-2 ring-inset ring-amber-500'
+                              : esDesviacionSeleccionada
+                                ? 'bg-sky-50/70 dark:bg-sky-950/35'
+                                : 'bg-white dark:bg-slate-900'
+                          }`}
                         >
                           {/* 1. DESVIACIÓN Y PELIGRO ASOCIADO (rowSpan por toda la Desviación) */}
                           {esPrimeraFilaDesviacion && (
@@ -1333,9 +1460,11 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`desv-${grupoDesv.desviacionKey}`, null)
                               }
-                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
-                                `desv-${grupoDesv.desviacionKey}`
-                              )}`}
+                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${
+                                esDesviacionSeleccionada
+                                  ? 'border-l-4 border-l-[#1e4e79] dark:border-l-sky-500 bg-sky-50/70 dark:bg-sky-950/40'
+                                  : ''
+                              } ${celdaActivaClass(`desv-${grupoDesv.desviacionKey}`)}`}
                             >
                               <div className="flex items-baseline gap-1 font-semibold text-slate-900 dark:text-slate-100">
                                 <span className="text-slate-500 dark:text-slate-400 shrink-0">
@@ -1391,7 +1520,9 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`cons-${grupoCons.consecuenciaKey}`, null)
                               }
-                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
+                              className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${
+                                esDesviacionSeleccionada ? 'bg-sky-50/50 dark:bg-sky-950/30' : ''
+                              } ${celdaActivaClass(
                                 `cons-${grupoCons.consecuenciaKey}`
                               )}`}
                             >
@@ -1425,11 +1556,16 @@ export function Escenarios() {
                           {esPrimeraFilaCausa && (
                             <>
                               <td
+                                id={`causa-${causaEsc.id}`}
                                 rowSpan={causaEsc.filasBarrera}
                                 onClick={() =>
                                   seleccionar(`causa-${causaEsc.id}`, null)
                                 }
-                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${
+                                  esFilaEnfocada
+                                    ? 'bg-amber-100 dark:bg-amber-950/80 ring-2 ring-inset ring-amber-500'
+                                    : esDesviacionSeleccionada ? 'bg-sky-50/40 dark:bg-sky-950/25' : ''
+                                } ${celdaActivaClass(
                                   `causa-${causaEsc.id}`
                                 )}`}
                               >
@@ -1437,6 +1573,11 @@ export function Escenarios() {
                                   <span className="text-slate-500 dark:text-slate-400 font-medium shrink-0">
                                     {causaEsc.numCausa}
                                   </span>
+                                  {esFilaEnfocada && (
+                                    <span className="shrink-0 px-1 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white shadow-2xs">
+                                      ★ Crítico
+                                    </span>
+                                  )}
                                   <textarea
                                     disabled={!esAdmin}
                                     rows={Math.max(
@@ -1455,36 +1596,63 @@ export function Escenarios() {
                                 </div>
                               </td>
 
-                              {/* Frecuencia de Diseño (A-E) */}
+                              {/* Frecuencia de Diseño Cuantitativa con Letra Debajo */}
                               <td
                                 rowSpan={causaEsc.filasBarrera}
                                 onClick={() =>
                                   seleccionar(`fdis-${causaEsc.id}`, null)
                                 }
-                                className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center align-top w-[68px] min-w-[68px] transition-colors ${celdaActivaClass(
+                                title={`Frecuencia de diseño: ${causaEsc.frecuencia_diseno_num ?? FREC_CUANTITATIVA[causaEsc.frecuencia_diseno]?.cuant ?? causaEsc.frecuencia_diseno}/año (Categoría ${causaEsc.frecuencia_diseno})`}
+                                className={`border border-slate-300 dark:border-slate-700 px-1 py-1 text-center align-top w-[78px] min-w-[74px] transition-colors ${
+                                  esFilaEnfocada
+                                    ? 'bg-amber-100/70 dark:bg-amber-950/60'
+                                    : esDesviacionSeleccionada ? 'bg-sky-50/40 dark:bg-sky-950/25' : ''
+                                } ${celdaActivaClass(
                                   `fdis-${causaEsc.id}`
                                 )}`}
                               >
-                                <div className="relative flex items-center justify-between">
-                                  <select
-                                    disabled={!esAdmin}
-                                    value={causaEsc.frecuencia_diseno}
-                                    onChange={(e) =>
-                                      actualizarEscenario(causaEsc.id, (act) => ({
-                                        ...act,
-                                        frecuencia_diseno: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full appearance-none bg-transparent pr-3.5 text-center font-bold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
-                                  >
-                                    {FRECUENCIAS.map((f) => (
-                                      <option key={f} value={f} className="text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900">
-                                        {f}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <span className="pointer-events-none absolute right-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                                    ▾
+                                <div className="flex flex-col items-center justify-center py-0.5">
+                                  {esAdmin ? (
+                                    <input
+                                      type="text"
+                                      value={
+                                        causaEsc.frecuencia_diseno_num ??
+                                        frecuenciaLetraANumero(causaEsc.frecuencia_diseno).toString()
+                                      }
+                                      placeholder="0.001"
+                                      onChange={(e) => {
+                                        const valStr = e.target.value
+                                        const parsed = parseFloat(valStr)
+                                        const letraCalculada =
+                                          !isNaN(parsed) && parsed > 0
+                                            ? frecuenciaNumeroALetra(parsed)
+                                            : (causaEsc.frecuencia_diseno as 'A' | 'B' | 'C' | 'D' | 'E')
+                                        try {
+                                          localStorage.setItem(
+                                            `gidr_frec_num_${causaEsc.id}`,
+                                            valStr
+                                          )
+                                        } catch {
+                                          // ignorar cuota
+                                        }
+                                        actualizarEscenario(causaEsc.id, (act) => ({
+                                          ...act,
+                                          frecuencia_diseno_num: valStr,
+                                          frecuencia_diseno: letraCalculada,
+                                        }))
+                                      }}
+                                      className="w-full text-center font-mono font-bold text-xs text-slate-900 dark:text-slate-100 bg-transparent hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 rounded px-0.5 py-0.5 border border-transparent focus:border-sky-500 focus:outline-none"
+                                      title="Editar frecuencia cuantitativa de diseño (ej: 0.001, 0.3, 0.98)"
+                                    />
+                                  ) : (
+                                    <span className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100 leading-tight">
+                                      {causaEsc.frecuencia_diseno_num ||
+                                        FREC_CUANTITATIVA[causaEsc.frecuencia_diseno]?.cuant ||
+                                        causaEsc.frecuencia_diseno}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-extrabold text-[#1e4e79] dark:text-sky-400 uppercase tracking-wider leading-tight mt-0.5">
+                                    ({causaEsc.frecuencia_diseno})
                                   </span>
                                 </div>
                               </td>
@@ -1502,7 +1670,9 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${celdaActivaClass(
+                                className={`border border-slate-300 dark:border-slate-700 p-1.5 align-top transition-colors ${
+                                  esFilaEnfocada ? 'bg-amber-50/70 dark:bg-amber-950/40' : ''
+                                } ${celdaActivaClass(
                                   `bar-desc-${causaEsc.id}-${bIdx}`
                                 )}`}
                               >
@@ -1582,7 +1752,7 @@ export function Escenarios() {
                                 </div>
                               </td>
 
-                              {/* Tag del activo */}
+                              {/* Tag del activo - Vínculo directo a Gestión de Riesgos */}
                               <td
                                 onClick={() =>
                                   seleccionar(
@@ -1590,28 +1760,61 @@ export function Escenarios() {
                                     bIdx
                                   )
                                 }
-                                className={`border border-slate-300 dark:border-slate-700 p-1 align-top transition-colors ${celdaActivaClass(
-                                  `bar-tag-${causaEsc.id}-${bIdx}`
-                                )}`}
+                                title={
+                                  barrera.tag_activo
+                                    ? `Clic para ir a Gestión de Riesgos del activo ${barrera.tag_activo}`
+                                    : undefined
+                                }
+                                className={`border border-slate-300 dark:border-slate-700 p-1 align-top transition-colors ${
+                                  esFilaEnfocada
+                                    ? 'bg-amber-50/70 dark:bg-amber-950/40'
+                                    : esDesviacionSeleccionada
+                                      ? 'bg-sky-50/20 dark:bg-sky-950/15'
+                                      : ''
+                                } ${celdaActivaClass(`bar-tag-${causaEsc.id}-${bIdx}`)}`}
                               >
-                                <input
-                                  disabled={!esAdmin}
-                                  value={barrera.tag_activo}
-                                  onChange={(e) =>
-                                    actualizarEscenario(causaEsc.id, (act) => ({
-                                      ...act,
-                                      barreras: act.barreras.map((item, idx) =>
-                                        idx === bIdx
-                                          ? {
-                                              ...item,
-                                              tag_activo: e.target.value,
-                                            }
-                                          : item
-                                      ),
-                                    }))
-                                  }
-                                  className="w-full bg-transparent font-mono text-[11px] text-slate-700 dark:text-slate-300 focus:outline-none focus:bg-white dark:focus:bg-slate-800"
-                                />
+                                <div className="flex items-center justify-between gap-1 w-full">
+                                  {barrera.tag_activo ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        navigate(`/gestion-riesgos?tag=${encodeURIComponent(barrera.tag_activo)}`)
+                                      }}
+                                      title={`Ir a Gestión de Riesgos: ${barrera.tag_activo}`}
+                                      className="font-mono text-[11px] font-bold text-sky-700 dark:text-sky-400 hover:text-sky-900 dark:hover:text-sky-200 hover:underline cursor-pointer truncate text-left w-full flex items-center justify-between group"
+                                    >
+                                      <span className="truncate">{barrera.tag_activo}</span>
+                                      <span className="text-[10px] text-sky-500 opacity-60 group-hover:opacity-100 transition-opacity">↗</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 italic px-1">—</span>
+                                  )}
+                                  {esAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        const nuevo = window.prompt(
+                                          'Editar Tag del Activo / Salvaguarda:',
+                                          barrera.tag_activo || ''
+                                        )
+                                        if (nuevo !== null) {
+                                          actualizarEscenario(causaEsc.id, (act) => ({
+                                            ...act,
+                                            barreras: act.barreras.map((item, idx) =>
+                                              idx === bIdx ? { ...item, tag_activo: nuevo.trim() } : item
+                                            ),
+                                          }))
+                                        }
+                                      }}
+                                      title="Editar Tag del Activo"
+                                      className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 opacity-50 hover:opacity-100 shrink-0"
+                                    >
+                                      ✎
+                                    </button>
+                                  )}
+                                </div>
                               </td>
 
                               {/* FRR de Diseño */}
@@ -1754,7 +1957,14 @@ export function Escenarios() {
                               </td>
 
                               {/* FRR Actual Calculado */}
-                              <td className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top bg-slate-50/70 dark:bg-slate-800/50 font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              <td
+                                onClick={() => seleccionar(`bar-frr-act-${causaEsc.id}-${bIdx}`, bIdx)}
+                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top font-mono font-semibold text-slate-700 dark:text-slate-300 cursor-pointer transition-colors ${
+                                  esDesviacionSeleccionada
+                                    ? 'bg-sky-100/40 dark:bg-sky-900/30'
+                                    : 'bg-slate-50/70 dark:bg-slate-800/50'
+                                }`}
+                              >
                                 {calcFrrActual(
                                   barrera.frr_diseno,
                                   barrera.estado_actual,
@@ -1822,7 +2032,11 @@ export function Escenarios() {
                               onClick={() =>
                                 seleccionar(`bar-empty-${causaEsc.id}`, null)
                               }
-                              className={`border border-slate-300 dark:border-slate-700 p-2 text-center italic text-slate-400 dark:text-slate-500 ${celdaActivaClass(
+                              className={`border border-slate-300 dark:border-slate-700 p-2 text-center italic text-slate-400 dark:text-slate-500 ${
+                                esDesviacionSeleccionada
+                                  ? 'bg-sky-50/30 dark:bg-sky-950/20'
+                                  : ''
+                              } ${celdaActivaClass(
                                 `bar-empty-${causaEsc.id}`
                               )}`}
                             >
@@ -1850,7 +2064,9 @@ export function Escenarios() {
                                       null
                                     )
                                   }
-                                  className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center align-top w-[60px] min-w-[60px] transition-colors ${celdaActivaClass(
+                                  className={`border border-slate-300 dark:border-slate-700 px-1.5 py-1 text-center align-top w-[60px] min-w-[60px] transition-colors ${
+                                    esDesviacionSeleccionada ? 'bg-sky-50/40 dark:bg-sky-950/25' : ''
+                                  } ${celdaActivaClass(
                                     `${campo}-${grupoCons.consecuenciaKey}`
                                   )}`}
                                 >
@@ -1887,18 +2103,34 @@ export function Escenarios() {
                           {/* 6. FRECUENCIA ACTUAL, RIESGO DISEÑO Y RIESGO ACTUAL POR IMPACTO (rowSpan por Causa) */}
                           {esPrimeraFilaCausa && (
                             <>
-                              {/* Frecuencia de ocurrencia actual calculada */}
+                              {/* Frecuencia de ocurrencia actual calculada (Cuantitativa con Letra Debajo) */}
                               <td
                                 rowSpan={causaEsc.filasBarrera}
-                                className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top bg-slate-50 dark:bg-slate-800 font-mono font-bold text-slate-900 dark:text-slate-100"
+                                onClick={() => seleccionar(`frec-act-${causaEsc.id}`, null)}
+                                title={`Frecuencia actual calculada: ${calc.frecuencia_actual_display}/año (Categoría ${calc.frecuencia_actual})`}
+                                className={`border border-slate-300 dark:border-slate-700 px-1 py-1 text-center align-top cursor-pointer transition-colors ${
+                                  esFilaEnfocada
+                                    ? 'bg-amber-200/80 dark:bg-amber-900/60'
+                                    : esDesviacionSeleccionada
+                                      ? 'bg-sky-100/60 dark:bg-sky-900/40'
+                                      : 'bg-slate-50 dark:bg-slate-800'
+                                }`}
                               >
-                                {calc.frecuencia_actual}
+                                <div className="flex flex-col items-center justify-center leading-tight py-0.5">
+                                  <span className="font-mono font-bold text-xs text-slate-900 dark:text-slate-100">
+                                    {calc.frecuencia_actual_display}
+                                  </span>
+                                  <span className="text-[10px] font-extrabold text-[#1e4e79] dark:text-sky-400 uppercase tracking-wider">
+                                    ({calc.frecuencia_actual})
+                                  </span>
+                                </div>
                               </td>
 
                               {/* Riesgo de Diseño global */}
                               <td
                                 rowSpan={causaEsc.filasBarrera}
-                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
+                                onClick={() => seleccionar(`riesgo-dis-${causaEsc.id}`, null)}
+                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] cursor-pointer ${colorCeldaRiesgo(
                                   calc.riesgo_diseno_global
                                 )}`}
                               >
@@ -1917,8 +2149,9 @@ export function Escenarios() {
                                 <td
                                   key={k}
                                   rowSpan={causaEsc.filasBarrera}
+                                  onClick={() => seleccionar(`riesgo-act-${k}-${causaEsc.id}`, null)}
                                   title={`Riesgo Actual (${k}): ${niv}`}
-                                  className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] ${colorCeldaRiesgo(
+                                  className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] cursor-pointer ${colorCeldaRiesgo(
                                     niv
                                   )}`}
                                 >
@@ -1937,7 +2170,9 @@ export function Escenarios() {
                                 className={`border border-slate-300 dark:border-slate-700 p-2 align-top w-[260px] min-w-[240px] cursor-pointer group transition-all duration-200 hover:bg-blue-50/80 dark:hover:bg-blue-950/40 hover:shadow-xs ${
                                   escenarioEnfocado === causaEsc.id
                                     ? 'bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-500 shadow-md'
-                                    : 'bg-slate-50/30 dark:bg-slate-900/30'
+                                    : esDesviacionSeleccionada
+                                      ? 'bg-sky-50/50 dark:bg-sky-950/30'
+                                      : 'bg-slate-50/30 dark:bg-slate-900/30'
                                 }`}
                               >
                                 <div className="flex flex-col h-full gap-1">
@@ -1968,17 +2203,42 @@ export function Escenarios() {
                               </td>
                             </>
                           )}
+
+                          {/* 8. GESTIÓN DE RIESGOS (rowSpan por Desviación/Escenario) - 1 solo botón fusionado por escenario */}
+                          {esPrimeraFilaDesviacion && (
+                            <td
+                              rowSpan={grupoDesv.filasDesviacion}
+                              className={`border border-slate-300 dark:border-slate-700 p-2 text-center align-middle w-[125px] min-w-[115px] transition-colors ${
+                                esDesviacionSeleccionada
+                                  ? 'bg-sky-50/60 dark:bg-sky-950/35'
+                                  : 'bg-white dark:bg-slate-900'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigate(`/gestion-riesgos?escenario_id=${encodeURIComponent(grupoDesv.numDesv)}`)
+                                }}
+                                title={`Ir a Gestión de Riesgos para el Escenario ${grupoDesv.numDesv} (${grupoDesv.nodo} - ${grupoDesv.palabra_guia})`}
+                                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold rounded-md bg-[#1e4e79] hover:bg-[#163a5c] text-white dark:bg-sky-600 dark:hover:bg-sky-500 shadow-2xs transition-all cursor-pointer group"
+                              >
+                                <span>Ver GIDR</span>
+                                <span className="text-[10px] opacity-75 group-hover:translate-x-0.5 transition-transform">→</span>
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       )
                     })
                   })
                 )
-              )}
+              })}
 
               {jerarquia.length === 0 && (
                 <tr>
                   <td
-                    colSpan={23}
+                    colSpan={24}
                     className="p-8 text-center text-slate-400 text-sm"
                   >
                     No se encontraron escenarios PHA para los filtros seleccionados.

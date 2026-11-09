@@ -8,6 +8,7 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Escenarios } from './pages/Escenarios'
 import { Recomendaciones } from './pages/Recomendaciones'
+import { GestionRiesgos } from './pages/GestionRiesgos'
 import { Lopa } from './pages/Lopa'
 import { Nodos } from './pages/Nodos'
 import { BowTieView } from './pages/BowTieView'
@@ -15,6 +16,7 @@ import { Barreras } from './pages/Barreras'
 import { Integraciones } from './pages/Integraciones'
 import { Indicadores } from './pages/Indicadores'
 import { AuditoriaView } from './pages/AuditoriaView'
+import { Configuracion } from './pages/Configuracion'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +58,7 @@ export const App: React.FC = () => {
                 <Route path="nodos" element={<Nodos />} />
                 <Route path="escenarios" element={<Escenarios />} />
                 <Route path="recomendaciones" element={<Recomendaciones />} />
+                <Route path="gestion-riesgos" element={<GestionRiesgos />} />
                 <Route path="lopa" element={<Lopa />} />
                 <Route path="bowtie/:id" element={<BowTieView />} />
                 <Route path="bowtie/desviacion/:desviacionId" element={<BowTieView />} />
@@ -63,6 +66,7 @@ export const App: React.FC = () => {
                 <Route path="integraciones" element={<Integraciones />} />
                 <Route path="indicadores" element={<Indicadores />} />
                 <Route path="auditoria" element={<AuditoriaView />} />
+                <Route path="configuracion" element={<Configuracion />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

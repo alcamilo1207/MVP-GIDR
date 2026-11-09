@@ -243,11 +243,14 @@ export const Layout: React.FC = () => {
               <NavLink to="/recomendaciones" className={navClass}>
                 Recomendaciones
               </NavLink>
+              <NavLink to="/gestion-riesgos" className={navClass}>
+                Gestión de Riesgos
+              </NavLink>
               <button
                 type="button"
                 onClick={() => setPanelAbierto(true)}
                 className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-300 dark:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-2xs"
-                title="Abrir panel con LOPA, Barreras, Integraciones, API 754 y Auditoría"
+                title="Abrir panel con LOPA, Barreras, Integraciones, API 754, Auditoría y Configuración"
               >
                 <span className="text-sm">☰</span>
                 <span>Más módulos</span>
@@ -582,6 +585,26 @@ export const Layout: React.FC = () => {
                   </div>
                 </NavLink>
 
+                <NavLink
+                  to="/configuracion"
+                  onClick={() => setPanelAbierto(false)}
+                  className={({ isActive }) =>
+                    `flex items-start gap-3 p-3 rounded-lg border transition ${
+                      isActive
+                        ? 'bg-blue-50/90 border-blue-400 text-blue-900 dark:bg-blue-950/40 dark:border-blue-600 dark:text-blue-200 font-semibold shadow-xs'
+                        : 'border-slate-100 dark:border-slate-800/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200'
+                    }`
+                  }
+                >
+                  <span className="text-xl p-1.5 bg-sky-100 dark:bg-sky-900/40 rounded-md">⚙️</span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">Configuración del Sistema</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                      Ajuste de matriz 5×5, escalas de severidad, frecuencia y rangos de criticidad.
+                    </div>
+                  </div>
+                </NavLink>
+
                 {/* Sección responsiva para pantallas pequeñas */}
                 <div className="md:hidden pt-4 border-t border-slate-200 dark:border-slate-800 space-y-1">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 pb-1">
@@ -614,6 +637,13 @@ export const Layout: React.FC = () => {
                     className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
                   >
                     Recomendaciones
+                  </NavLink>
+                  <NavLink
+                    to="/gestion-riesgos"
+                    onClick={() => setPanelAbierto(false)}
+                    className="block px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Gestión de Riesgos
                   </NavLink>
                 </div>
               </div>
