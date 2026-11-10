@@ -39,6 +39,52 @@ export function guardarBaseApi(url: string) {
   }
 }
 
+export function resolverUrlWs(ruta: string = '/ws/eventos'): string {
+  const rutaLimpia = ruta.startsWith('/') ? ruta : `/${ruta}`
+
+  if (typeof window !== 'undefined') {
+    const customWs = localStorage.getItem('gidr_ws_url')
+    if (customWs && customWs.trim()) {
+      let c = customWs.trim().replace(/\/+$/, '')
+      if (!c.startsWith('ws://') && !c.startsWith('wss://')) {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        c = `${proto}//${c.replace(/^(http|https):\/\//, '')}`
+      }
+      return `${c}${rutaLimpia}`
+    }
+  }
+
+  const envWsUrl = (import.meta as unknown as { env?: { VITE_WS_URL?: string } }).env?.VITE_WS_URL
+  if (envWsUrl && envWsUrl.trim()) {
+    let w = envWsUrl.trim().replace(/\/+$/, '')
+    if (!w.startsWith('ws://') && !w.startsWith('wss://')) {
+      const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      w = `${proto}//${w.replace(/^(http|https):\/\//, '')}`
+    }
+    if (w.endsWith(rutaLimpia)) return w
+    return `${w}${rutaLimpia}`
+  }
+
+  // Derivar de resolverBaseApi()
+  const baseHttp = resolverBaseApi()
+  if (baseHttp.startsWith('/')) {
+    const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8000'
+    return `${proto}//${host}${rutaLimpia}`
+  }
+
+  let wsUrl = baseHttp
+    .replace(/^http:\/\//i, 'ws://')
+    .replace(/^https:\/\//i, 'wss://')
+
+  if (!wsUrl.startsWith('ws://') && !wsUrl.startsWith('wss://')) {
+    const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    wsUrl = `${proto}//${wsUrl}`
+  }
+
+  return `${wsUrl.replace(/\/+$/, '')}${rutaLimpia}`
+}
+
 export const BASE = resolverBaseApi()
 const KEY = 'gidr_token'
 

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { useTema } from '../context/TemaContext'
+import { resolverUrlWs } from '../lib/api'
 
 interface NotificacionTicker {
   id: string
@@ -114,6 +115,37 @@ export const Layout: React.FC = () => {
     setNotificacionesActivas([])
   }, [])
 
+  const simularCambioDemo = useCallback(() => {
+    const hora = new Date().toLocaleTimeString('es-CO', { hour12: false })
+    const muestra: NotificacionTicker[] = [
+      {
+        id: `demo-${Date.now()}-1`,
+        hora,
+        fuente: 'GEMELO H-101',
+        barreraTag: 'ESD-101',
+        tagGemelo: 'XV-101A/B',
+        estado: 'DEGRADADO',
+        factorDegradacion: 50,
+        valor: 48.5,
+        escenariosRecalculados: 2,
+        mensajeExtra: 'Prueba de carrera · Tiempo de cierre degradado (+3.8s)',
+      },
+      {
+        id: `demo-${Date.now()}-2`,
+        hora,
+        fuente: 'SIS H-101',
+        barreraTag: 'SIS-H101-TSHH',
+        tagGemelo: 'H101.TSHH.TRIP',
+        estado: 'DEGRADADO',
+        factorDegradacion: 30,
+        valor: 642.1,
+        escenariosRecalculados: 1,
+        mensajeExtra: 'Alerta TMT · Temperatura de piel de tubos próxima a límite de diseño',
+      },
+    ]
+    recibirCambios(muestra)
+  }, [recibirCambios])
+
   useEffect(() => {
     return () => {
       if (esperaTimerRef.current) window.clearTimeout(esperaTimerRef.current)
@@ -131,29 +163,29 @@ export const Layout: React.FC = () => {
   useEffect(() => {
     let ws: WebSocket | null = null
     let reconectarTimer: number | undefined
-    let usarPuertoDirecto = Boolean((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV)
-    const envWsUrl = (import.meta as unknown as { env?: { VITE_WS_URL?: string } }).env?.VITE_WS_URL
-    const envApiUrl = (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL
+    let cancelado = false
 
     const conectar = () => {
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      let url: string
-      if (envWsUrl) {
-        url = envWsUrl.replace(/\/+$/, '')
-        if (!url.endsWith('/ws/eventos')) url = `${url}/ws/eventos`
-      } else if (envApiUrl) {
-        const wsHost = envApiUrl.replace(/\/+$/, '').replace(/^http/, 'ws')
-        url = `${wsHost}/ws/eventos`
-      } else if (usarPuertoDirecto) {
-        url = `${proto}//${window.location.hostname}:8000/ws/eventos`
-      } else {
-        url = `${proto}//${window.location.host}/api/ws/eventos`
+      if (cancelado) return
+
+      const url = resolverUrlWs('/ws/eventos')
+      console.log('[GIDR WebSocket] Conectando a:', url)
+
+      try {
+        ws = new WebSocket(url)
+      } catch (err) {
+        console.warn('[GIDR WebSocket] Error al crear WebSocket:', err)
+        reconectarTimer = window.setTimeout(conectar, 3000)
+        return
       }
 
-      ws = new WebSocket(url)
-
       ws.onopen = () => {
+        if (cancelado) {
+          ws?.close()
+          return
+        }
         setWsConectado(true)
+        console.log('[GIDR WebSocket] Canal en tiempo real conectado:', url)
       }
 
       ws.onmessage = (ev) => {
@@ -208,6 +240,28 @@ export const Layout: React.FC = () => {
               if (nuevas.length > 0) {
                 recibirCambios(nuevas)
               }
+            } else if (data.tipo === 'ACTUALIZACION_PLANTA' && Array.isArray(data.cambios) && data.cambios.length > 0) {
+              const nuevas: NotificacionTicker[] = []
+
+              for (const c of data.cambios) {
+                const tag = String(c.tag ?? '')
+                const estado = (c.estado_nuevo ?? 'ACTIVO') as 'ACTIVO' | 'DEGRADADO' | 'DESHABILITADO'
+                const deg = Number(c.factor_nuevo ?? (estado === 'DEGRADADO' ? 50 : estado === 'DESHABILITADO' ? 100 : 0))
+
+                nuevas.push({
+                  id: `${Date.now()}-${tag}-${Math.random().toString(36).slice(2, 6)}`,
+                  hora,
+                  fuente: 'PLANTA / CMMS',
+                  barreraTag: tag,
+                  estado,
+                  factorDegradacion: deg,
+                  escenariosRecalculados: Number(data.escenarios_recalculados ?? 0),
+                })
+              }
+
+              if (nuevas.length > 0) {
+                recibirCambios(nuevas)
+              }
             }
           }
         } catch {
@@ -215,18 +269,21 @@ export const Layout: React.FC = () => {
         }
       }
 
-      ws.onerror = () => {
-        usarPuertoDirecto = !usarPuertoDirecto
+      ws.onerror = (err) => {
+        console.warn('[GIDR WebSocket] Error de conexión:', err)
       }
 
       ws.onclose = () => {
         setWsConectado(false)
-        reconectarTimer = window.setTimeout(conectar, 3000)
+        if (!cancelado) {
+          reconectarTimer = window.setTimeout(conectar, 3000)
+        }
       }
     }
 
     conectar()
     return () => {
+      cancelado = true
       if (reconectarTimer) window.clearTimeout(reconectarTimer)
       if (ws) ws.close()
     }
@@ -367,7 +424,9 @@ export const Layout: React.FC = () => {
                   ? 'bg-amber-400 animate-pulse'
                   : notificacionesActivas.length > 0
                   ? 'bg-emerald-400 animate-pulse'
-                  : 'bg-slate-600'
+                  : wsConectado
+                  ? 'bg-emerald-500'
+                  : 'bg-amber-500 animate-pulse'
               }`}
             />
             <span className="text-[11px] font-bold tracking-wider uppercase text-slate-200">
@@ -400,8 +459,8 @@ export const Layout: React.FC = () => {
           </div>
 
           {/* Cinta: muestra todos los cambios juntos cruzando lentamente */}
-          <div className="flex-1 overflow-hidden relative h-full flex items-center">
-            {!enEspera && notificacionesActivas.length > 0 && (
+          <div className="flex-1 overflow-hidden relative h-full flex items-center px-3">
+            {!enEspera && notificacionesActivas.length > 0 ? (
               <div
                 key={tandaKey}
                 onAnimationEnd={alTerminarTanda}
@@ -467,11 +526,36 @@ export const Layout: React.FC = () => {
                   )
                 })}
               </div>
+            ) : enEspera && notificacionesActivas.length > 0 ? (
+              <div className="text-xs text-amber-300/90 font-mono flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                <span>Pausa entre tandas · Preparando tanda {tandaActual + 1} de {REPETICIONES}...</span>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-400 font-mono flex items-center gap-2">
+                <span
+                  className={`inline-block w-2 h-2 rounded-full ${
+                    wsConectado ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                  }`}
+                />
+                <span>
+                  {wsConectado
+                    ? 'Gemelo digital sincronizado · Esperando eventos o cambios de estado...'
+                    : 'Conectando canal de telemetría en tiempo real con el servidor...'}
+                </span>
+              </div>
             )}
           </div>
 
-          {/* Botón derecho para vaciar la cinta */}
+          {/* Acciones de la cinta de notificaciones */}
           <div className="h-full px-2.5 bg-slate-950 border-l border-slate-800 flex items-center gap-2 shrink-0 z-10">
+            <button
+              onClick={simularCambioDemo}
+              className="text-[11px] text-sky-400 hover:text-sky-200 px-2 py-0.5 rounded hover:bg-slate-800 transition-colors font-medium"
+              title="Simular cambio del gemelo digital para verificar la cinta y el ciclo de 4 tandas"
+            >
+              ⚡ Simular
+            </button>
             <button
               onClick={() => {
                 ultimoEstadoRef.current = {}

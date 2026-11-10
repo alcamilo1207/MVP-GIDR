@@ -114,9 +114,9 @@ def test_cmms_json_y_tag_no_mapeado(client, admin):
 def test_evento_antiguo_no_pisa_estado_actual(client, admin):
     ev = lambda estado, fecha: {"tag_activo": "PSV-103", "estado": estado, "fecha": fecha}  # noqa: E731
     client.post("/integraciones/cmms/estado-barreras", headers=admin, json={"eventos": [
-        ev("FUERA_DE_SERVICIO", "2026-10-10T10:00:00Z")]})
+        ev("FUERA_DE_SERVICIO", "2026-12-10T10:00:00Z")]})
     client.post("/integraciones/cmms/estado-barreras", headers=admin, json={"eventos": [
-        ev("DEGRADADO", "2026-10-09T10:00:00Z")]})  # más viejo: solo historial
+        ev("DEGRADADO", "2026-12-09T10:00:00Z")]})  # más viejo: solo historial
     b = client.get("/barreras?q=PSV-103", headers=admin).json()["items"][0]
     assert b["estado_actual"] == "FUERA_DE_SERVICIO"
 

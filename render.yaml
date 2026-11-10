@@ -43,6 +43,8 @@ services:
           type: web
           name: gidr-backend
           property: host
+      - key: VITE_WS_URL
+        value: wss://gidr-backend.onrender.com/ws/eventos
 
   # ============================================================================
   # 3. GEMELO DIGITAL HORNO H-101 (Sitio Estático React / Vite)

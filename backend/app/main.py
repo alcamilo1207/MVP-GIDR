@@ -82,6 +82,7 @@ for r in (auth.router, jerarquia.router, escenarios.router, barreras.router, int
 
 
 @app.websocket("/ws/eventos")
+@app.websocket("/api/ws/eventos")
 async def ws_eventos(ws: WebSocket) -> None:
     """Canal WebSocket en tiempo real hacia todas las pantallas del frontend (Escenarios PHA, BowTie, Dashboard)."""
     await gestor_ws.conectar(ws)
@@ -95,6 +96,7 @@ async def ws_eventos(ws: WebSocket) -> None:
 
 
 @app.websocket("/ws/gemelo")
+@app.websocket("/api/ws/gemelo")
 async def ws_gemelo(ws: WebSocket) -> None:
     """Canal WebSocket de ingesta directa para un Gemelo Digital externo en tiempo real.
     Acepta mensajes JSON: ``{"lecturas": [{"tag_gemelo": "...", "valor": 95.0}]}``.

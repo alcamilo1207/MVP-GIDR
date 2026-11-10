@@ -17,14 +17,33 @@ export interface RespuestaPuenteGidr {
 
 export function resolverUrlWsGidr(): string {
   const guardada = localStorage.getItem('gidr_ws_url')
-  if (guardada) return guardada
+  if (guardada && guardada.trim()) {
+    let g = guardada.trim()
+    if (!g.startsWith('ws://') && !g.startsWith('wss://')) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      g = `${proto}//${g.replace(/^(http|https):\/\//, '')}`
+    }
+    return g
+  }
 
   const envWs = (import.meta as unknown as { env?: { VITE_GIDR_WS_URL?: string } }).env?.VITE_GIDR_WS_URL
-  if (envWs) return envWs.trim()
+  if (envWs && envWs.trim()) {
+    let w = envWs.trim()
+    if (!w.startsWith('ws://') && !w.startsWith('wss://')) {
+      const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      w = `${proto}//${w.replace(/^(http|https):\/\//, '')}`
+    }
+    return w
+  }
 
   const envApi = (import.meta as unknown as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL
-  if (envApi) {
-    const wsHost = envApi.replace(/\/+$/, '').replace(/^http/, 'ws')
+  if (envApi && envApi.trim()) {
+    let raw = envApi.trim().replace(/\/+$/, '')
+    let wsHost = raw.replace(/^http:\/\//, 'ws://').replace(/^https:\/\//, 'wss://')
+    if (!wsHost.startsWith('ws://') && !wsHost.startsWith('wss://')) {
+      const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      wsHost = `${proto}//${wsHost}`
+    }
     return `${wsHost}/ws/gemelo`
   }
 
