@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
@@ -17,47 +17,17 @@ interface NotificacionTicker {
   mensajeExtra?: string
 }
 
-const NOTIFICACIONES_INICIALES: NotificacionTicker[] = [
-  {
-    id: 'init-1',
-    hora: new Date().toLocaleTimeString('es-CO', { hour12: false }),
-    fuente: 'TELEMETRÍA H-101',
-    barreraTag: 'HORNO-H101',
-    tagGemelo: 'CDU-100 · NODO 1',
-    estado: 'INFO',
-    mensajeExtra: 'Monitoreo dinámico de barreras activo · 7 lazos instrumentados en línea',
-  },
-  {
-    id: 'init-2',
-    hora: new Date().toLocaleTimeString('es-CO', { hour12: false }),
-    fuente: 'SIS',
-    barreraTag: 'SIS-H101-TSHH',
-    tagGemelo: 'H101.TSHH.TRIP',
-    estado: 'ACTIVO',
-    factorDegradacion: 1,
-    mensajeExtra: 'Lazo SIS de alta temp. de piel de tubos armado (FRR 100)',
-  },
-  {
-    id: 'init-3',
-    hora: new Date().toLocaleTimeString('es-CO', { hour12: false }),
-    fuente: 'SIS',
-    barreraTag: 'SIS-H101-BMS',
-    tagGemelo: 'H101.BMS.FLAME_OK',
-    estado: 'ACTIVO',
-    factorDegradacion: 1,
-    mensajeExtra: 'Gestión de quemadores BMS permisivo OK (FRR 1000)',
-  },
-  {
-    id: 'init-4',
-    hora: new Date().toLocaleTimeString('es-CO', { hour12: false }),
-    fuente: 'DCS',
-    barreraTag: 'FIC-H101',
-    tagGemelo: 'H101.FIC101.OP_ERR',
-    estado: 'ACTIVO',
-    factorDegradacion: 1,
-    mensajeExtra: 'Control de flujo de carga estable (FRR 10)',
-  },
-]
+/**
+ * Configuración de la cinta de notificaciones del gemelo digital:
+ * - Todos los cambios se notifican de inmediato en la misma tanda.
+ * - Al terminar de pasar todos los cambios, se aplica una espera (ESPERA_MS).
+ * - Se repite el ciclo hasta completar 4 tandas (REPETICIONES).
+ * - Una vez cumplidas las 4 tandas sin nuevos cambios, la cinta se vacía.
+ */
+const REPETICIONES = 4
+const ESPERA_MS = 3500
+const DURACION_BASE_S = 20
+const DURACION_EXTRA_POR_ITEM_S = 6
 
 export const Layout: React.FC = () => {
   const { usuario, cerrarSesion } = useAuth()
@@ -67,8 +37,88 @@ export const Layout: React.FC = () => {
 
   const [wsConectado, setWsConectado] = useState(false)
   const [panelAbierto, setPanelAbierto] = useState(false)
-  const [notificaciones, setNotificaciones] = useState<NotificacionTicker[]>(NOTIFICACIONES_INICIALES)
   const ultimoEstadoRef = useRef<Record<string, string>>({})
+
+  // Estado del sistema de tandas de notificaciones del gemelo digital
+  const [notificacionesActivas, setNotificacionesActivas] = useState<NotificacionTicker[]>([])
+  const [tandaActual, setTandaActual] = useState(0) // 0 = inactivo / vacía, 1..4 = tanda en curso
+  const [enEspera, setEnEspera] = useState(false)
+  const [tandaKey, setTandaKey] = useState(0)
+
+  const notificacionesRef = useRef<NotificacionTicker[]>([])
+  const tandaRef = useRef(0)
+  const esperaTimerRef = useRef<number | undefined>(undefined)
+
+  const alTerminarTanda = useCallback(() => {
+    const actualTanda = tandaRef.current
+    if (actualTanda >= REPETICIONES) {
+      // Completadas las 4 tandas: vaciar la cinta
+      tandaRef.current = 0
+      setTandaActual(0)
+      setEnEspera(false)
+      notificacionesRef.current = []
+      setNotificacionesActivas([])
+      return
+    }
+
+    // Aún faltan tandas por notificar: aplicar espera
+    setEnEspera(true)
+
+    esperaTimerRef.current = window.setTimeout(() => {
+      esperaTimerRef.current = undefined
+      const siguienteTanda = actualTanda + 1
+      tandaRef.current = siguienteTanda
+      setTandaActual(siguienteTanda)
+      setEnEspera(false)
+      setTandaKey((k) => k + 1)
+    }, ESPERA_MS)
+  }, [])
+
+  const recibirCambios = useCallback((nuevas: NotificacionTicker[]) => {
+    // Si había un timer de espera pendiente, cancelarlo para mostrar inmediatamente
+    if (esperaTimerRef.current) {
+      window.clearTimeout(esperaTimerRef.current)
+      esperaTimerRef.current = undefined
+    }
+
+    // Actualizar lista activa: si una barrera ya estaba, actualizarla al estado más reciente; sino, agregarla
+    const actualizadas = [...notificacionesRef.current]
+    for (const nueva of nuevas) {
+      const idx = actualizadas.findIndex((n) => n.barreraTag === nueva.barreraTag)
+      if (idx >= 0) {
+        actualizadas[idx] = nueva
+      } else {
+        actualizadas.push(nueva)
+      }
+    }
+
+    notificacionesRef.current = actualizadas
+    setNotificacionesActivas(actualizadas)
+
+    // Iniciar inmediatamente la Tanda 1 con todos los cambios activos
+    tandaRef.current = 1
+    setTandaActual(1)
+    setEnEspera(false)
+    setTandaKey((k) => k + 1)
+  }, [])
+
+  const vaciarCinta = useCallback(() => {
+    if (esperaTimerRef.current) {
+      window.clearTimeout(esperaTimerRef.current)
+      esperaTimerRef.current = undefined
+    }
+    tandaRef.current = 0
+    setTandaActual(0)
+    setEnEspera(false)
+    notificacionesRef.current = []
+    setNotificacionesActivas([])
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (esperaTimerRef.current) window.clearTimeout(esperaTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -156,22 +206,7 @@ export const Layout: React.FC = () => {
               }
 
               if (nuevas.length > 0) {
-                setNotificaciones((prev) => [...nuevas, ...prev].slice(0, 14))
-              }
-            } else if (data.tipo === 'ACTUALIZACION_PLANTA' && Array.isArray(data.cambios) && data.cambios.length > 0) {
-              const nuevas: NotificacionTicker[] = data.cambios.map(
-                (c: { tag_activo: string; antes: string; despues: string; escenarios_afectados: number }) => ({
-                  id: `${Date.now()}-${c.tag_activo}-${Math.random().toString(36).slice(2, 6)}`,
-                  hora,
-                  fuente: 'PLANTA / CMMS',
-                  barreraTag: c.tag_activo,
-                  estado: (c.despues as 'ACTIVO' | 'DEGRADADO' | 'DESHABILITADO') || 'INFO',
-                  escenariosRecalculados: c.escenarios_afectados ?? data.escenarios_recalculados ?? 0,
-                  mensajeExtra: `${c.antes} → ${c.despues}`,
-                })
-              )
-              if (nuevas.length > 0) {
-                setNotificaciones((prev) => [...nuevas, ...prev].slice(0, 14))
+                recibirCambios(nuevas)
               }
             }
           }
@@ -195,7 +230,7 @@ export const Layout: React.FC = () => {
       if (reconectarTimer) window.clearTimeout(reconectarTimer)
       if (ws) ws.close()
     }
-  }, [queryClient])
+  }, [queryClient, recibirCambios])
 
   const handleLogout = () => {
     cerrarSesion()
@@ -320,117 +355,130 @@ export const Layout: React.FC = () => {
           </div>
         </div>
 
-        {/* Barra permanente de notificaciones en vivo tipo Stock Market Ticker */}
+        {/* Barra de notificaciones del gemelo digital */}
         <div className="bg-slate-900 dark:bg-slate-950 text-slate-100 border-t border-slate-800 h-9 flex items-center overflow-hidden">
           {/* Etiqueta fija izquierda */}
           <div className="h-full px-3 bg-slate-950 border-r border-slate-800 flex items-center gap-2 shrink-0 z-10 shadow-[6px_0_12px_rgba(0,0,0,0.45)]">
             <span
               className={`w-2 h-2 rounded-full ${
-                notificaciones.some((n) => n.estado === 'DESHABILITADO')
+                notificacionesActivas.some((n) => n.estado === 'DESHABILITADO')
                   ? 'bg-red-500 animate-ping'
-                  : notificaciones.some((n) => n.estado === 'DEGRADADO')
+                  : notificacionesActivas.some((n) => n.estado === 'DEGRADADO')
                   ? 'bg-amber-400 animate-pulse'
-                  : 'bg-emerald-400 animate-pulse'
+                  : notificacionesActivas.length > 0
+                  ? 'bg-emerald-400 animate-pulse'
+                  : 'bg-slate-600'
               }`}
             />
             <span className="text-[11px] font-bold tracking-wider uppercase text-slate-200">
               LIVE RISK TICKER
             </span>
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-sky-400 border border-slate-700">
-              {notificaciones.length}
-            </span>
-          </div>
-
-          {/* Cinta deslizante de derecha a izquierda (Stock Market Marquee) */}
-          <div className="flex-1 overflow-hidden relative h-full flex items-center">
-            <div
-              className="gidr-ticker-track"
-              style={
-                {
-                  '--ticker-duration': `${Math.max(24, notificaciones.length * 6)}s`,
-                } as React.CSSProperties
-              }
+            <span
+              className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-sky-400 border border-slate-700"
+              title="Cambios activos del gemelo digital"
             >
-              {[0, 1].map((copiaIdx) => (
-                <div key={copiaIdx} className="inline-flex items-center">
-                  {notificaciones.map((n, idx) => {
-                    const esCritico = n.estado === 'DESHABILITADO'
-                    const esDegradado = n.estado === 'DEGRADADO'
-                    const esActivo = n.estado === 'ACTIVO'
-
-                    return (
-                      <Link
-                        key={`${copiaIdx}-${n.id}`}
-                        to="/escenarios"
-                        className={`inline-flex items-center gap-2 px-4 py-1 text-xs border-r border-slate-800/90 hover:bg-slate-800/70 transition-colors ${
-                          idx === 0 && copiaIdx === 0 ? 'gidr-ticker-item-new' : ''
-                        }`}
-                      >
-                        <span className="font-mono text-[10px] text-slate-400">
-                          {n.hora}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-slate-800 text-sky-300 border border-slate-700">
-                          {n.fuente}
-                        </span>
-                        <span className="font-mono font-bold text-white tracking-tight">
-                          {n.barreraTag}
-                        </span>
-                        {n.tagGemelo && (
-                          <span className="font-mono text-[11px] text-slate-400">
-                            ({n.tagGemelo}
-                            {typeof n.valor === 'number' ? ` = ${n.valor}` : ''})
-                          </span>
-                        )}
-
-                        {esCritico && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-red-950/90 text-red-300 border border-red-800/80">
-                            ▲ DESHABILITADO · 100% DEGR.
-                          </span>
-                        )}
-                        {esDegradado && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-amber-950/90 text-amber-300 border border-amber-800/80">
-                            ▲ DEGRADADO · {n.factorDegradacion ?? 50}%
-                          </span>
-                        )}
-                        {esActivo && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-emerald-950/90 text-emerald-300 border border-emerald-800/80">
-                            ▼ ACTIVO · OK
-                          </span>
-                        )}
-                        {n.estado === 'INFO' && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-semibold text-[11px] bg-sky-950/80 text-sky-300 border border-sky-800/70">
-                            ● EN LÍNEA
-                          </span>
-                        )}
-
-                        {n.mensajeExtra && (
-                          <span className="text-slate-300 text-[11px]">
-                            {n.mensajeExtra}
-                          </span>
-                        )}
-                        {typeof n.escenariosRecalculados === 'number' &&
-                          n.escenariosRecalculados > 0 && (
-                            <span className="text-[11px] font-semibold text-amber-300">
-                              · ⚡ {n.escenariosRecalculados} esc. recalculado(s)
-                            </span>
-                          )}
-                      </Link>
-                    )
-                  })}
-                </div>
-              ))}
-            </div>
+              {notificacionesActivas.length}
+            </span>
+            {tandaActual > 0 && notificacionesActivas.length > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+                  enEspera
+                    ? 'bg-amber-950/80 text-amber-300 border-amber-800 animate-pulse'
+                    : 'bg-slate-800 text-sky-300 border-slate-700'
+                }`}
+                title={
+                  enEspera
+                    ? `Pausa entre tandas (${ESPERA_MS / 1000}s)`
+                    : `Tanda de notificación ${tandaActual} de ${REPETICIONES}`
+                }
+              >
+                {enEspera
+                  ? `Pausa · Tanda ${tandaActual}/${REPETICIONES}`
+                  : `Tanda ${tandaActual}/${REPETICIONES}`}
+              </span>
+            )}
           </div>
 
-          {/* Botón derecho para limpiar / reiniciar feed */}
+          {/* Cinta: muestra todos los cambios juntos cruzando lentamente */}
+          <div className="flex-1 overflow-hidden relative h-full flex items-center">
+            {!enEspera && notificacionesActivas.length > 0 && (
+              <div
+                key={tandaKey}
+                onAnimationEnd={alTerminarTanda}
+                style={{
+                  animationDuration: `${Math.max(
+                    16,
+                    DURACION_BASE_S + Math.max(0, notificacionesActivas.length - 1) * DURACION_EXTRA_POR_ITEM_S
+                  )}s`,
+                }}
+                className="gidr-ticker-once inline-flex items-center gap-3 py-1"
+              >
+                {notificacionesActivas.map((n, idx) => {
+                  const esCritico = n.estado === 'DESHABILITADO'
+                  const esDegradado = n.estado === 'DEGRADADO'
+                  const esActivo = n.estado === 'ACTIVO'
+
+                  return (
+                    <Link
+                      key={`${n.id}-${idx}`}
+                      to="/escenarios"
+                      className="inline-flex items-center gap-2 px-3 py-1 text-xs border border-slate-800/90 rounded bg-slate-800/70 hover:bg-slate-800 transition-colors shadow-2xs"
+                    >
+                      <span className="font-mono text-[10px] text-slate-400">{n.hora}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-slate-900 text-sky-300 border border-slate-700">
+                        {n.fuente}
+                      </span>
+                      <span className="font-mono font-bold text-white tracking-tight">{n.barreraTag}</span>
+                      {n.tagGemelo && (
+                        <span className="font-mono text-[11px] text-slate-400">
+                          ({n.tagGemelo}
+                          {typeof n.valor === 'number' ? ` = ${n.valor}` : ''})
+                        </span>
+                      )}
+
+                      {esCritico && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-red-950/90 text-red-300 border border-red-800/80">
+                          ▲ DESHABILITADO · 100% DEGR.
+                        </span>
+                      )}
+                      {esDegradado && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-amber-950/90 text-amber-300 border border-amber-800/80">
+                          ▲ DEGRADADO · {n.factorDegradacion ?? 50}%
+                        </span>
+                      )}
+                      {esActivo && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-bold text-[11px] bg-emerald-950/90 text-emerald-300 border border-emerald-800/80">
+                          ▼ ACTIVO · OK
+                        </span>
+                      )}
+                      {n.estado === 'INFO' && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-semibold text-[11px] bg-sky-950/80 text-sky-300 border border-sky-800/70">
+                          ● EN LÍNEA
+                        </span>
+                      )}
+
+                      {n.mensajeExtra && <span className="text-slate-300 text-[11px]">{n.mensajeExtra}</span>}
+                      {typeof n.escenariosRecalculados === 'number' && n.escenariosRecalculados > 0 && (
+                        <span className="text-[11px] font-semibold text-amber-300">
+                          · ⚡ {n.escenariosRecalculados} esc. recalculado(s)
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Botón derecho para vaciar la cinta */}
           <div className="h-full px-2.5 bg-slate-950 border-l border-slate-800 flex items-center gap-2 shrink-0 z-10">
             <button
               onClick={() => {
                 ultimoEstadoRef.current = {}
-                setNotificaciones(NOTIFICACIONES_INICIALES)
+                vaciarCinta()
               }}
               className="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded hover:bg-slate-800 transition-colors"
-              title="Restablecer cinta de notificaciones"
+              title="Vaciar cinta de notificaciones"
             >
               Limpiar
             </button>

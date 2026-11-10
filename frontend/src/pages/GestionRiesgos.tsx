@@ -23,6 +23,15 @@ export type EstadoAccion = 'Abierta' | 'Finalizada'
 
 export type NivelAccion = 'Nivel Causa' | 'Nivel Barrera'
 
+export interface ArchivoSoporte {
+  id: string
+  nombre: string
+  tipo: string // 'application/pdf' | 'image/png' | ...
+  tamano: number // bytes
+  fecha: string
+  dataUrl?: string // base64 / blob URL para vista previa y descarga
+}
+
 export interface AccionMitigacion {
   id: string // e.g. ACT-001
   riesgo_id: string // FK
@@ -33,6 +42,8 @@ export interface AccionMitigacion {
   avance: number // 0 - 100
   fecha_vencimiento: string
   fecha_creacion: string
+  observaciones?: string
+  archivos?: ArchivoSoporte[]
 }
 
 export interface RiesgoItem {
@@ -240,6 +251,12 @@ const RIESGOS_SEMILLA: RiesgoItem[] = [
   },
 ]
 
+export function formatTamanoArchivo(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 const ACCIONES_SEMILLA: AccionMitigacion[] = [
   // RSK-001 (Pérdida de flujo crudo - Escenario 1.2)
   {
@@ -252,6 +269,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 50,
     fecha_vencimiento: '2026-12-15',
     fecha_creacion: '2026-10-12',
+    observaciones: 'En espera de aprobación presupuestal para transmisor Rosemount 3051S.',
+    archivos: [],
   },
   {
     id: 'ACT-002',
@@ -263,6 +282,16 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 100,
     fecha_vencimiento: '2026-11-05',
     fecha_creacion: '2026-10-12',
+    observaciones: 'Procedimiento divulgado a todo el personal de consola y campo con registro de asistencia.',
+    archivos: [
+      {
+        id: 'att-002-1',
+        nombre: 'POE-CDU-04_CorteCarga_Firmado.pdf',
+        tipo: 'application/pdf',
+        tamano: 345000,
+        fecha: '2026-11-05',
+      },
+    ],
   },
   {
     id: 'ACT-003',
@@ -274,6 +303,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 45,
     fecha_vencimiento: '2026-11-28',
     fecha_creacion: '2026-10-14',
+    observaciones: 'Programada prueba de lazo durante parada menor de mantenimiento.',
+    archivos: [],
   },
 
   // RSK-002 (Degradación FIC-H101 - Escenario 1.2)
@@ -287,6 +318,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 20,
     fecha_vencimiento: '2026-11-25',
     fecha_creacion: '2026-10-15',
+    observaciones: 'Repuesto solicitado al almacén central bajo orden SAP 4500892.',
+    archivos: [],
   },
   {
     id: 'ACT-005',
@@ -298,6 +331,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 60,
     fecha_vencimiento: '2026-12-05',
     fecha_creacion: '2026-10-16',
+    observaciones: 'Inspección previa realizada. Se requiere andamio para acceso seguro.',
+    archivos: [],
   },
 
   // RSK-003 (Disparo SIS-H101-TSHH - Escenario 1.1)
@@ -311,6 +346,23 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 100,
     fecha_vencimiento: '2026-10-30',
     fecha_creacion: '2026-10-18',
+    observaciones: 'Prueba ejecutada con éxito. Tiempo de cierre < 1.8 s conforme a requerimiento SIL 2.',
+    archivos: [
+      {
+        id: 'att-006-1',
+        nombre: 'Reporte_FST_XV101_Gas.pdf',
+        tipo: 'application/pdf',
+        tamano: 480000,
+        fecha: '2026-10-30',
+      },
+      {
+        id: 'att-006-2',
+        nombre: 'Foto_Inspeccion_Valvula_XV101.jpg',
+        tipo: 'image/jpeg',
+        tamano: 620000,
+        fecha: '2026-10-30',
+      },
+    ],
   },
   {
     id: 'ACT-007',
@@ -322,6 +374,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 60,
     fecha_vencimiento: '2026-11-20',
     fecha_creacion: '2026-10-19',
+    observaciones: 'Barrido preliminar completado sin puntos calientes anómalos detectados.',
+    archivos: [],
   },
 
   // RSK-004 (BMS quemadores - Escenario 1.1)
@@ -335,6 +389,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 50,
     fecha_vencimiento: '2026-11-22',
     fecha_creacion: '2026-10-20',
+    observaciones: 'Lentes de escáner 3 y 4 con acumulación de hollín. Limpieza en curso.',
+    archivos: [],
   },
 
   // RSK-005 (Sobrepresión T-101 - Escenario 1.3)
@@ -348,6 +404,16 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 100,
     fecha_vencimiento: '2026-11-02',
     fecha_creacion: '2026-10-22',
+    observaciones: 'Ventiladores balanceados y limpieza química de aletas concluida satisfactoriamente.',
+    archivos: [
+      {
+        id: 'att-009-1',
+        nombre: 'Certificado_Inspeccion_Aeroenfriadores_E102.pdf',
+        tipo: 'application/pdf',
+        tamano: 512000,
+        fecha: '2026-11-02',
+      },
+    ],
   },
   {
     id: 'ACT-010',
@@ -359,6 +425,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 80,
     fecha_vencimiento: '2026-11-18',
     fecha_creacion: '2026-10-23',
+    observaciones: 'Simulación en DCS completada. Falta confirmación de campo en parada programada.',
+    archivos: [],
   },
 
   // RSK-006 (PSV-101 - Escenario 1.3)
@@ -372,6 +440,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 75,
     fecha_vencimiento: '2026-12-10',
     fecha_creacion: '2026-10-25',
+    observaciones: 'Válvula de repuesto montada mientras PSV-101 entra al taller de calibración.',
+    archivos: [],
   },
 
   // RSK-007 (Desalador D-101 - Escenario 1.6)
@@ -385,6 +455,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 30,
     fecha_vencimiento: '2026-11-30',
     fecha_creacion: '2026-10-28',
+    observaciones: 'Ensayos de botella en laboratorio completados para ajustar PPM.',
+    archivos: [],
   },
 
   // RSK-008 (Runaway R-201 - Escenario 1.7)
@@ -398,6 +470,8 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 60,
     fecha_vencimiento: '2026-12-01',
     fecha_creacion: '2026-10-29',
+    observaciones: 'Protocolo de prueba redactado y en revisión por ingeniería de procesos.',
+    archivos: [],
   },
 
   // RSK-009 (Fuga K-201 - Escenario 1.9)
@@ -411,6 +485,16 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 100,
     fecha_vencimiento: '2026-11-04',
     fecha_creacion: '2026-11-01',
+    observaciones: 'Sellos mecánicos cambiados por John Crane Tipo 28AT con prueba de estanqueidad conforme.',
+    archivos: [
+      {
+        id: 'att-014-1',
+        nombre: 'Reporte_Cambio_Sellos_K201.pdf',
+        tipo: 'application/pdf',
+        tamano: 420000,
+        fecha: '2026-11-04',
+      },
+    ],
   },
   {
     id: 'ACT-015',
@@ -422,6 +506,23 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 100,
     fecha_vencimiento: '2026-11-06',
     fecha_creacion: '2026-11-01',
+    observaciones: '4 detectores calibrados con gas patrón 25 PPM H2S / Balance N2 con curva de respuesta ok.',
+    archivos: [
+      {
+        id: 'att-015-1',
+        nombre: 'Certificado_Calibracion_H2S_K201.pdf',
+        tipo: 'application/pdf',
+        tamano: 290000,
+        fecha: '2026-11-06',
+      },
+      {
+        id: 'att-015-2',
+        nombre: 'Foto_Detector_H2S_Calibrado.png',
+        tipo: 'image/png',
+        tamano: 380000,
+        fecha: '2026-11-06',
+      },
+    ],
   },
 
   // RSK-010 (Gas blowby V-202 - Escenario 1.12)
@@ -435,11 +536,13 @@ const ACCIONES_SEMILLA: AccionMitigacion[] = [
     avance: 45,
     fecha_vencimiento: '2026-12-20',
     fecha_creacion: '2026-11-03',
+    observaciones: 'Programada prueba conjunta con operaciones.',
+    archivos: [],
   },
 ]
 
 const STORAGE_KEY_RIESGOS = 'gidr_gestion_riesgos_items_v4'
-const STORAGE_KEY_ACCIONES = 'gidr_gestion_riesgos_acciones_v4'
+const STORAGE_KEY_ACCIONES = 'gidr_gestion_riesgos_acciones_v5'
 
 export const GestionRiesgos: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -464,8 +567,18 @@ export const GestionRiesgos: React.FC = () => {
     try {
       const guardado = localStorage.getItem(STORAGE_KEY_ACCIONES)
       if (guardado) return JSON.parse(guardado)
-      const guardadoV2 = localStorage.getItem('gidr_gestion_riesgos_acciones_v2')
-      if (guardadoV2) return JSON.parse(guardadoV2)
+      const guardadoV4 = localStorage.getItem('gidr_gestion_riesgos_acciones_v4')
+      if (guardadoV4) {
+        const parsed: AccionMitigacion[] = JSON.parse(guardadoV4)
+        return parsed.map((a) => {
+          const sem = ACCIONES_SEMILLA.find((s) => s.id === a.id)
+          return {
+            ...a,
+            observaciones: a.observaciones ?? sem?.observaciones ?? '',
+            archivos: a.archivos ?? sem?.archivos ?? [],
+          }
+        })
+      }
     } catch (e) {
       console.error('Error cargando acciones desde localStorage', e)
     }
@@ -488,6 +601,21 @@ export const GestionRiesgos: React.FC = () => {
       console.error(e)
     }
   }, [acciones])
+
+  // Modales de archivos de soporte y previsualización
+  const [accionParaArchivos, setAccionParaArchivos] = useState<AccionMitigacion | null>(null)
+  const [avisoValidacionSoporte, setAvisoValidacionSoporte] = useState<string | null>(null)
+  const [archivoParaPrevisualizar, setArchivoParaPrevisualizar] = useState<{
+    archivo: ArchivoSoporte
+    accionId: string
+  } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // Mantener sincronizada la acción del modal de archivos cuando cambia el estado `acciones`
+  const accionSeleccionadaParaArchivos = useMemo(() => {
+    if (!accionParaArchivos) return null
+    return acciones.find((a) => a.id === accionParaArchivos.id) ?? accionParaArchivos
+  }, [acciones, accionParaArchivos])
 
   // Selección activa de Riesgo
   const [riesgoSeleccionadoId, setRiesgoSeleccionadoId] = useState<string>(() => {
@@ -532,6 +660,8 @@ export const GestionRiesgos: React.FC = () => {
     estado: 'Abierta',
     avance: 0,
     fecha_vencimiento: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    observaciones: '',
+    archivos: [],
   })
 
   // Sincronizar parámetro ?escenario_id=... desde Escenarios PHA (e.g. 1.1, 1.2)
@@ -685,6 +815,156 @@ export const GestionRiesgos: React.FC = () => {
     )
   }
 
+  // Validación de cierre de acción: requiere archivos de soporte
+  const cambiarEstadoAccion = (accion: AccionMitigacion, nuevoEstado: EstadoAccion) => {
+    if (nuevoEstado === 'Finalizada') {
+      const soportes = accion.archivos || []
+      if (soportes.length === 0) {
+        setAccionParaArchivos(accion)
+        setAvisoValidacionSoporte(
+          `Para finalizar y cerrar la acción "${accion.id}", es obligatorio adjuntar al menos un archivo de soporte (PDF o imagen) que certifique su cumplimiento.`
+        )
+        return
+      }
+    }
+    actualizarAccion(accion.id, 'estado', nuevoEstado)
+    if (nuevoEstado === 'Finalizada') {
+      mostrarMensaje(`✓ Acción ${accion.id} finalizada exitosamente con soporte verificado.`)
+    }
+  }
+
+  // Validación al cambiar avance al 100%
+  const cambiarAvanceAccion = (accion: AccionMitigacion, nuevoAvance: number) => {
+    const val = Math.max(0, Math.min(100, nuevoAvance))
+    if (val === 100 && accion.estado !== 'Finalizada') {
+      const soportes = accion.archivos || []
+      if (soportes.length === 0) {
+        setAccionParaArchivos(accion)
+        setAvisoValidacionSoporte(
+          `Para completar el 100% y cerrar la acción "${accion.id}", debes adjuntar al menos un archivo de soporte (PDF o imagen).`
+        )
+        actualizarAccion(accion.id, 'avance', 99)
+        return
+      }
+      actualizarAccion(accion.id, 'avance', 100)
+      actualizarAccion(accion.id, 'estado', 'Finalizada')
+      mostrarMensaje(`✓ Acción ${accion.id} finalizada al 100% con soporte.`)
+      return
+    }
+    actualizarAccion(accion.id, 'avance', val)
+  }
+
+  // Subir archivos de soporte (PDF / Imágenes)
+  const handleSubirArchivos = (accionId: string, files: FileList | null) => {
+    if (!files || files.length === 0) return
+
+    Array.from(files).forEach((file) => {
+      const esPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+      const esImagen = file.type.startsWith('image/')
+      if (!esPdf && !esImagen) {
+        alert(
+          `El archivo "${file.name}" no es válido. Solo se permiten documentos PDF o imágenes (JPG, PNG, WEBP, GIF).`
+        )
+        return
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`El archivo "${file.name}" supera el límite de 5 MB.`)
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        const nuevoArchivo: ArchivoSoporte = {
+          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          nombre: file.name,
+          tipo: file.type || (esPdf ? 'application/pdf' : 'image/jpeg'),
+          tamano: file.size,
+          fecha: new Date().toISOString().split('T')[0],
+          dataUrl,
+        }
+
+        setAcciones((prev) =>
+          prev.map((a) => {
+            if (a.id === accionId) {
+              const list = a.archivos ? [...a.archivos, nuevoArchivo] : [nuevoArchivo]
+              return { ...a, archivos: list }
+            }
+            return a
+          })
+        )
+        setAvisoValidacionSoporte(null)
+        mostrarMensaje(`✓ Archivo "${file.name}" adjuntado a la acción ${accionId}.`)
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // Eliminar un archivo de soporte con advertencia si era el único de una acción finalizada
+  const handleEliminarArchivo = (accionId: string, archivoId: string) => {
+    const accion = acciones.find((a) => a.id === accionId)
+    if (!accion) return
+
+    if (accion.estado === 'Finalizada' && (accion.archivos?.length ?? 0) <= 1) {
+      if (
+        !window.confirm(
+          `Esta acción está en estado "Finalizada". Si eliminas su único archivo de soporte, la acción volverá a estar "Abierta" (90% avance) por falta de evidencia de cierre. ¿Deseas continuar?`
+        )
+      ) {
+        return
+      }
+      setAcciones((prev) =>
+        prev.map((a) => {
+          if (a.id === accionId) {
+            return {
+              ...a,
+              archivos: (a.archivos || []).filter((f) => f.id !== archivoId),
+              estado: 'Abierta',
+              avance: 90,
+            }
+          }
+          return a
+        })
+      )
+      mostrarMensaje(`Archivo eliminado. La acción ${accionId} se reabrió por falta de soporte.`)
+      return
+    }
+
+    setAcciones((prev) =>
+      prev.map((a) => {
+        if (a.id === accionId) {
+          return {
+            ...a,
+            archivos: (a.archivos || []).filter((f) => f.id !== archivoId),
+          }
+        }
+        return a
+      })
+    )
+    mostrarMensaje(`Archivo eliminado de ${accionId}.`)
+  }
+
+  // Descargar archivo de soporte
+  const handleDescargarArchivo = (archivo: ArchivoSoporte) => {
+    if (archivo.dataUrl) {
+      const a = document.createElement('a')
+      a.href = archivo.dataUrl
+      a.download = archivo.nombre
+      a.click()
+    } else {
+      const blob = new Blob([`Archivo de soporte para: ${archivo.nombre}`], {
+        type: archivo.tipo,
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = archivo.nombre
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
   // Crear nuevo riesgo
   const handleCrearRiesgo = (e: React.FormEvent) => {
     e.preventDefault()
@@ -753,18 +1033,33 @@ export const GestionRiesgos: React.FC = () => {
     }, 0)
     const nuevoId = `ACT-${String(maxNum + 1).padStart(3, '0')}`
 
+    // Validar si intenta crearla directamente en Finalizada sin soportes
+    let estadoFinal = nuevaAccion.estado || 'Abierta'
+    let avanceFinal = Number(nuevaAccion.avance) || 0
+    if (estadoFinal === 'Finalizada' && (!nuevaAccion.archivos || nuevaAccion.archivos.length === 0)) {
+      alert(
+        '⚠️ Para registrar una acción en estado "Finalizada", es obligatorio adjuntar al menos un archivo de soporte. La acción se creará en estado "Abierta".'
+      )
+      estadoFinal = 'Abierta'
+      avanceFinal = Math.min(90, avanceFinal)
+    } else if (estadoFinal === 'Finalizada') {
+      avanceFinal = 100
+    }
+
     const item: AccionMitigacion = {
       id: nuevoId,
       riesgo_id: riesgoActivo.id,
       titulo: nuevaAccion.titulo.trim(),
       nivel: nuevaAccion.nivel || 'Nivel Barrera',
       responsable: nuevaAccion.responsable || RESPONSABLES_SUGERIDOS[0],
-      estado: nuevaAccion.estado || 'Abierta',
-      avance: nuevaAccion.estado === 'Finalizada' ? 100 : Number(nuevaAccion.avance) || 0,
+      estado: estadoFinal,
+      avance: avanceFinal,
       fecha_vencimiento:
         nuevaAccion.fecha_vencimiento ||
         new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
       fecha_creacion: new Date().toISOString().split('T')[0],
+      observaciones: nuevaAccion.observaciones?.trim() || '',
+      archivos: nuevaAccion.archivos || [],
     }
 
     const nextAcciones = [item, ...acciones]
@@ -777,6 +1072,8 @@ export const GestionRiesgos: React.FC = () => {
       estado: 'Abierta',
       avance: 0,
       fecha_vencimiento: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
+      observaciones: '',
+      archivos: [],
     })
 
     mostrarMensaje(`Acción ${nuevoId} agregada a ${riesgoActivo.id}.`)
@@ -1541,10 +1838,10 @@ export const GestionRiesgos: React.FC = () => {
                 <th className="p-2 w-[80px] min-w-[75px] border-r border-slate-300 dark:border-slate-700">
                   ID
                 </th>
-                <th className="p-2 min-w-[320px] border-r border-slate-300 dark:border-slate-700">
+                <th className="p-2 min-w-[280px] border-r border-slate-300 dark:border-slate-700">
                   Título de acción
                 </th>
-                <th className="p-2 w-[220px] min-w-[190px] border-r border-slate-300 dark:border-slate-700">
+                <th className="p-2 w-[180px] min-w-[160px] border-r border-slate-300 dark:border-slate-700">
                   Responsable
                 </th>
                 <th className="p-2 w-[105px] min-w-[95px] text-center border-r border-slate-300 dark:border-slate-700">
@@ -1556,12 +1853,19 @@ export const GestionRiesgos: React.FC = () => {
                 <th className="p-2 w-[115px] min-w-[105px] text-center border-r border-slate-300 dark:border-slate-700">
                   Vence
                 </th>
+                <th className="p-2 w-[130px] min-w-[120px] text-center border-r border-slate-300 dark:border-slate-700">
+                  Soportes
+                </th>
+                <th className="p-2 min-w-[220px] border-r border-slate-300 dark:border-slate-700">
+                  Observaciones
+                </th>
                 <th className="p-2 w-[45px] text-center"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {accionesDelRiesgo.map((accion) => {
                 const esFinalizada = accion.estado === 'Finalizada'
+                const numArchivos = accion.archivos?.length ?? 0
 
                 return (
                   <tr
@@ -1604,12 +1908,12 @@ export const GestionRiesgos: React.FC = () => {
                       />
                     </td>
 
-                    {/* 6. Estado (Abierta / Finalizada) */}
+                    {/* 5. Estado (Abierta / Finalizada con validación obligatoria de soporte) */}
                     <td className="p-2 text-center border-r border-slate-200 dark:border-slate-800">
                       <select
                         value={accion.estado}
                         onChange={(e) =>
-                          actualizarAccion(accion.id, 'estado', e.target.value as EstadoAccion)
+                          cambiarEstadoAccion(accion, e.target.value as EstadoAccion)
                         }
                         className={`text-[11px] font-bold px-2.5 py-1 rounded border cursor-pointer focus:outline-none ${
                           accion.estado === 'Finalizada'
@@ -1626,7 +1930,7 @@ export const GestionRiesgos: React.FC = () => {
                       </select>
                     </td>
 
-                    {/* 7. % Avance */}
+                    {/* 6. % Avance (Valida soporte al intentar llegar al 100%) */}
                     <td className="p-2 text-center border-r border-slate-200 dark:border-slate-800">
                       <div className="flex items-center gap-1.5 justify-center">
                         <input
@@ -1635,11 +1939,7 @@ export const GestionRiesgos: React.FC = () => {
                           max={100}
                           value={accion.avance}
                           onChange={(e) =>
-                            actualizarAccion(
-                              accion.id,
-                              'avance',
-                              Math.max(0, Math.min(100, Number(e.target.value) || 0))
-                            )
+                            cambiarAvanceAccion(accion, Number(e.target.value) || 0)
                           }
                           className="w-12 text-center font-bold text-xs bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded py-0.5 px-1 focus:outline-none"
                         />
@@ -1659,7 +1959,7 @@ export const GestionRiesgos: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* 8. Fecha de Vencimiento */}
+                    {/* 7. Fecha de Vencimiento */}
                     <td className="p-2 text-center text-xs border-r border-slate-200 dark:border-slate-800">
                       <input
                         type="date"
@@ -1671,7 +1971,44 @@ export const GestionRiesgos: React.FC = () => {
                       />
                     </td>
 
-                    {/* 9. Opciones */}
+                    {/* 8. Archivos de Soporte (PDF / Imágenes obligatorias para cerrar) */}
+                    <td className="p-2 text-center border-r border-slate-200 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccionParaArchivos(accion)
+                          setAvisoValidacionSoporte(null)
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                          numArchivos > 0
+                            ? 'bg-sky-50 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/50'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                        title={`${numArchivos} archivo(s) de soporte adjuntos. Haz clic para ver o adjuntar.`}
+                      >
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                        </svg>
+                        <span>
+                          {numArchivos > 0 ? `${numArchivos} soporte${numArchivos > 1 ? 's' : ''}` : '+ Adjuntar'}
+                        </span>
+                      </button>
+                    </td>
+
+                    {/* 9. Campo de Observaciones (Editable) */}
+                    <td className="p-2 border-r border-slate-200 dark:border-slate-800">
+                      <textarea
+                        rows={2}
+                        value={accion.observaciones || ''}
+                        onChange={(e) =>
+                          actualizarAccion(accion.id, 'observaciones', e.target.value)
+                        }
+                        placeholder="Observaciones de avance o justificación de cierre..."
+                        className="w-full bg-transparent text-xs text-slate-700 dark:text-slate-300 resize-none focus:outline-none focus:bg-white dark:focus:bg-slate-800 px-1 py-0.5 rounded leading-snug border border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-sky-500 transition-colors"
+                      />
+                    </td>
+
+                    {/* 10. Opciones */}
                     <td className="p-2 text-center">
                       <button
                         type="button"
@@ -1690,7 +2027,7 @@ export const GestionRiesgos: React.FC = () => {
 
               {accionesDelRiesgo.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-400 text-xs">
+                  <td colSpan={10} className="p-8 text-center text-slate-400 text-xs">
                     {riesgoActivo
                       ? `No hay acciones registradas para el riesgo ${riesgoActivo.id}. Haz clic en el icono "+ " de la barra para registrar la primera.`
                       : 'Selecciona un riesgo en la tabla superior.'}
@@ -2021,6 +2358,25 @@ export const GestionRiesgos: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Observaciones (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Detalles de avance, condiciones de ejecución o notas técnicas..."
+                  value={nuevaAccion.observaciones || ''}
+                  onChange={(e) =>
+                    setNuevaAccion({ ...nuevaAccion, observaciones: e.target.value })
+                  }
+                  className="w-full rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-sky-50/60 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-[11px] text-sky-800 dark:text-sky-300">
+                ℹ️ <strong>Nota sobre cierre:</strong> Para marcar esta acción como "Finalizada" posteriormente, el sistema exigirá adjuntar al menos un archivo de soporte (PDF o imagen) en la columna <em>Soportes</em>.
+              </div>
+
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
@@ -2037,6 +2393,357 @@ export const GestionRiesgos: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: ARCHIVOS DE SOPORTE (OBLIGATORIOS PARA CERRAR ACCIÓN)    */}
+      {/* ============================================================== */}
+      {accionSeleccionadaParaArchivos && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xs p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            {/* Cabecera del modal */}
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-[#1e4e79] text-white dark:bg-sky-600">
+                    {accionSeleccionadaParaArchivos.id}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Archivos de Soporte de la Acción
+                  </h3>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      accionSeleccionadaParaArchivos.estado === 'Finalizada'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300'
+                        : 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/80 dark:text-blue-300'
+                    }`}
+                  >
+                    {accionSeleccionadaParaArchivos.estado} ({accionSeleccionadaParaArchivos.avance}%)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                  {accionSeleccionadaParaArchivos.titulo}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccionParaArchivos(null)
+                  setAvisoValidacionSoporte(null)
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Aviso de validación si intentó cerrar sin soportes */}
+            {avisoValidacionSoporte && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-lg text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                <span className="text-lg leading-none shrink-0">⚠️</span>
+                <div className="leading-relaxed font-medium">
+                  {avisoValidacionSoporte}
+                </div>
+              </div>
+            )}
+
+            {/* Zona de subida (Drag & Drop o Explorador) */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setIsDragging(true)
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsDragging(false)
+                handleSubirArchivos(accionSeleccionadaParaArchivos.id, e.dataTransfer.files)
+              }}
+              className={`border-2 border-dashed rounded-lg p-5 text-center transition-all ${
+                isDragging
+                  ? 'border-sky-500 bg-sky-50/70 dark:bg-sky-950/50'
+                  : 'border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <input
+                type="file"
+                id="file-upload-input-soporte"
+                accept=".pdf,image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                onChange={(e) =>
+                  handleSubirArchivos(accionSeleccionadaParaArchivos.id, e.target.files)
+                }
+                className="hidden"
+              />
+              <label
+                htmlFor="file-upload-input-soporte"
+                className="cursor-pointer flex flex-col items-center gap-1.5"
+              >
+                <svg
+                  className="w-9 h-9 text-sky-600 dark:text-sky-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Arrastra aquí tus archivos de soporte o haz clic para examinar
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Formatos aceptados: <strong>PDF</strong>, <strong>PNG</strong>, <strong>JPG</strong>, <strong>WEBP</strong> (máx. 5 MB por archivo)
+                </div>
+              </label>
+            </div>
+
+            {/* Listado de archivos adjuntos */}
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-[140px] pr-1">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>
+                  Archivos adjuntos ({accionSeleccionadaParaArchivos.archivos?.length ?? 0})
+                </span>
+                <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+                  Requerido: mínimo 1 archivo para cerrar acción
+                </span>
+              </div>
+
+              {(accionSeleccionadaParaArchivos.archivos || []).length === 0 ? (
+                <div className="p-6 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-400">
+                  No se han adjuntado archivos aún. Sube certificados de calibración, fotografías de inspección o reportes en PDF.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {(accionSeleccionadaParaArchivos.archivos || []).map((arch) => {
+                    const esPdf =
+                      arch.tipo === 'application/pdf' ||
+                      arch.nombre.toLowerCase().endsWith('.pdf')
+
+                    return (
+                      <div
+                        key={arch.id}
+                        className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {esPdf ? (
+                            <div className="w-8 h-8 rounded bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 font-extrabold text-[10px] flex items-center justify-center shrink-0 border border-rose-300 dark:border-rose-800">
+                              PDF
+                            </div>
+                          ) : arch.dataUrl ? (
+                            <img
+                              src={arch.dataUrl}
+                              alt={arch.nombre}
+                              className="w-8 h-8 rounded object-cover shrink-0 border border-slate-300 dark:border-slate-700"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 font-extrabold text-[10px] flex items-center justify-center shrink-0 border border-emerald-300 dark:border-emerald-800">
+                              IMG
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div
+                              className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[340px]"
+                              title={arch.nombre}
+                            >
+                              {arch.nombre}
+                            </div>
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                              <span>{formatTamanoArchivo(arch.tamano)}</span>
+                              <span>•</span>
+                              <span>{arch.fecha}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setArchivoParaPrevisualizar({
+                                archivo: arch,
+                                accionId: accionSeleccionadaParaArchivos.id,
+                              })
+                            }
+                            className="px-2 py-1 rounded text-xs text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/60 font-medium inline-flex items-center gap-1"
+                            title="Vista previa del archivo"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <span>Ver</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDescargarArchivo(arch)}
+                            className="px-2 py-1 rounded text-xs text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium inline-flex items-center gap-1"
+                            title="Descargar archivo"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span>Descargar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleEliminarArchivo(
+                                accionSeleccionadaParaArchivos.id,
+                                arch.id
+                              )
+                            }
+                            className="p-1.5 rounded text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60"
+                            title="Eliminar este archivo de soporte"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Pie de modal */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {(accionSeleccionadaParaArchivos.archivos?.length ?? 0) > 0 ? (
+                  <span className="text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1">
+                    ✓ Soporte válido para cierre
+                  </span>
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-300 font-medium">
+                    ⚠️ Sin soporte adjunto
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {accionSeleccionadaParaArchivos.estado === 'Abierta' &&
+                  (accionSeleccionadaParaArchivos.archivos?.length ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        actualizarAccion(accionSeleccionadaParaArchivos.id, 'avance', 100)
+                        actualizarAccion(
+                          accionSeleccionadaParaArchivos.id,
+                          'estado',
+                          'Finalizada'
+                        )
+                        setAccionParaArchivos(null)
+                        setAvisoValidacionSoporte(null)
+                        mostrarMensaje(
+                          `✓ Acción ${accionSeleccionadaParaArchivos.id} finalizada exitosamente con soporte certificado.`
+                        )
+                      }}
+                      className="px-3.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    >
+                      <span>✓ Finalizar acción ahora</span>
+                    </button>
+                  )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccionParaArchivos(null)
+                    setAvisoValidacionSoporte(null)
+                  }}
+                  className="px-4 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: VISOR / PREVIEW DE ARCHIVO (IMAGEN O PDF)               */}
+      {/* ============================================================== */}
+      {archivoParaPrevisualizar && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+          <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-2xl flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+                  {archivoParaPrevisualizar.accionId}
+                </span>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate max-w-[500px]">
+                  {archivoParaPrevisualizar.archivo.nombre}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setArchivoParaPrevisualizar(null)}
+                className="text-slate-400 hover:text-slate-200 font-bold p-1 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto my-3 flex items-center justify-center bg-slate-100 dark:bg-slate-950 rounded-lg p-2 min-h-[350px]">
+              {archivoParaPrevisualizar.archivo.dataUrl ? (
+                archivoParaPrevisualizar.archivo.tipo === 'application/pdf' ||
+                archivoParaPrevisualizar.archivo.nombre.toLowerCase().endsWith('.pdf') ? (
+                  <iframe
+                    src={archivoParaPrevisualizar.archivo.dataUrl}
+                    title={archivoParaPrevisualizar.archivo.nombre}
+                    className="w-full h-[550px] rounded border border-slate-300 dark:border-slate-700"
+                  />
+                ) : (
+                  <img
+                    src={archivoParaPrevisualizar.archivo.dataUrl}
+                    alt={archivoParaPrevisualizar.archivo.nombre}
+                    className="max-h-[550px] max-w-full rounded object-contain shadow-md"
+                  />
+                )
+              ) : (
+                <div className="text-center p-8 text-xs text-slate-500 dark:text-slate-400 space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-800 mx-auto flex items-center justify-center text-2xl font-bold text-slate-600 dark:text-slate-300">
+                    {archivoParaPrevisualizar.archivo.nombre.endsWith('.pdf') ? '📄' : '🖼️'}
+                  </div>
+                  <div className="font-semibold text-sm text-slate-800 dark:text-slate-200">
+                    {archivoParaPrevisualizar.archivo.nombre}
+                  </div>
+                  <p className="max-w-md mx-auto">
+                    Este archivo de soporte inicial es un registro certificado del sistema ({formatTamanoArchivo(archivoParaPrevisualizar.archivo.tamano)}). Puedes descargarlo directamente o adjuntar nuevos archivos reales con vista previa inmediata.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleDescargarArchivo(archivoParaPrevisualizar.archivo)}
+                    className="px-4 py-2 rounded-md bg-[#1e4e79] hover:bg-[#163a5c] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <span>Descargar archivo</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+              <span className="text-slate-500 dark:text-slate-400">
+                {formatTamanoArchivo(archivoParaPrevisualizar.archivo.tamano)} • Subido el {archivoParaPrevisualizar.archivo.fecha}
+              </span>
+              <button
+                type="button"
+                onClick={() => setArchivoParaPrevisualizar(null)}
+                className="px-4 py-1.5 rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
+              >
+                Cerrar vista previa
+              </button>
+            </div>
           </div>
         </div>
       )}

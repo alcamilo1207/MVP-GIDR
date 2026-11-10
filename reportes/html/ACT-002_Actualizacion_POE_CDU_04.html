@@ -1,0 +1,60 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>ACT-002</title>
+<style>
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; color: #1e293b; margin: 0; font-size: 11.5px; }
+.page { width: 210mm; height: 297mm; padding: 16mm 16mm 12mm; position: relative; overflow: hidden; }
+.header { background: #1e4e79; color: #fff; padding: 12px 16px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { margin: 0; font-size: 17px; letter-spacing: .3px; }
+.header .sub { font-size: 10.5px; opacity: .85; margin-top: 2px; }
+.badge { background: #fff; color: #1e4e79; font-weight: 700; padding: 5px 12px; border-radius: 3px; font-size: 14px; font-family: Menlo, monospace; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: #1e4e79; border-bottom: 1.5px solid #1e4e79; padding-bottom: 3px; margin: 18px 0 8px; }
+.titulo { font-size: 15px; font-weight: 700; line-height: 1.35; margin: 16px 0 4px; }
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f0f4f8; width: 24%; font-weight: 600; color: #334155; }
+.thead th { width: auto; }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 10px; font-weight: 700; font-size: 10.5px; color: #fff; }
+.ok { background: #15803d; }
+.bar { height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }
+.bar > div { height: 100%; width: 100%; background: #15803d; }
+.obs { border: 1px solid #cbd5e1; background: #f8fafc; padding: 10px 12px; border-radius: 3px; line-height: 1.5; min-height: 54px; }
+.firmas { position: absolute; left: 16mm; right: 16mm; bottom: 26mm; display: flex; gap: 24px; }
+.firma { flex: 1; text-align: center; font-size: 10.5px; color: #475569; }
+.firma .linea { border-top: 1px solid #334155; margin-top: 38px; padding-top: 4px; }
+.footer { position: absolute; left: 16mm; right: 16mm; bottom: 10mm; font-size: 9.5px; color: #64748b; display: flex; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 5px; }
+</style></head><body><div class="page">
+<div class="header"><div><h1>Reporte de Cierre de Acción</h1>
+<div class="sub">GIDR · Gestión de Riesgos · Acción de mitigación</div></div>
+<div class="badge">ACT-002</div></div>
+
+<div class="titulo">Actualizar procedimiento operativo estándar POE-CDU-04 para respuesta ante corte de carga</div>
+
+<h2>Información general</h2>
+<table>
+<tr><th>ID de acción</th><td>ACT-002</td><th>Nivel de acción</th><td>Nivel Causa</td></tr>
+<tr><th>Responsable</th><td>Laura Gómez</td><th>Estado</th><td><span class="pill ok">Finalizada</span></td></tr>
+<tr><th>Fecha de creación</th><td>2026-10-12</td><th>Fecha de vencimiento</th><td>2026-11-05</td></tr>
+<tr><th>Avance</th><td colspan="3"><div style="display:flex;align-items:center;gap:10px"><div class="bar" style="flex:1"><div></div></div><b>100%</b></div></td></tr>
+</table>
+
+<h2>Riesgo asociado</h2>
+<table>
+<tr><th>ID de riesgo</th><td>RSK-001</td><th>Nivel de riesgo</th><td><span class="pill" style="background:#ea580c">Alto</span></td></tr>
+<tr><th>Escenario PHA</th><td>1.2 · Horno H-101</td><th>Tag asociado</th><td style="font-family:Menlo,monospace">FIC-H101</td></tr>
+<tr><th>Descripción del riesgo</th><td colspan="3">Pérdida de flujo de crudo por serpentín radiante y sobrecalentamiento de tubos</td></tr>
+</table>
+
+<h2>Observaciones</h2>
+<div class="obs">Procedimiento divulgado a todo el personal de consola y campo con registro de asistencia.</div>
+
+<h2>Archivos de soporte (1)</h2>
+<table class="thead"><tr><th>Archivo</th><th style="width:70px">Tipo</th><th style="width:80px">Tamaño</th><th style="width:90px">Fecha</th></tr><tr><td>POE-CDU-04_CorteCarga_Firmado.pdf</td><td>PDF</td><td>337.1 KB</td><td>2026-11-05</td></tr></table>
+<p style="margin:8px 0 0;color:#15803d;font-weight:600">✓ Soporte documental verificado para el cierre de la acción.</p>
+
+<div class="firmas">
+<div class="firma"><div class="linea">Responsable de la acción<br><b>Laura Gómez</b></div></div>
+<div class="firma"><div class="linea">Revisión / Aprobación<br>&nbsp;</div></div>
+</div>
+<div class="footer"><span>GIDR · MVP Gestión Integral de Riesgos</span><span>Reporte ACT-002 · Generado el 2026-11-10</span></div>
+</div></body></html>

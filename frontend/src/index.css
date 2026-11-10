@@ -60,6 +60,30 @@
   animation-play-state: paused;
 }
 
+@keyframes gidr-ticker-once {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(calc(-100vw - 100%), 0, 0);
+  }
+}
+
+/* Notificación única que cruza la cinta de derecha a izquierda y se retira */
+.gidr-ticker-once {
+  position: absolute;
+  left: 100%;
+  white-space: nowrap;
+  will-change: transform;
+  animation-name: gidr-ticker-once;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.gidr-ticker-once:hover {
+  animation-play-state: paused;
+}
+
 .gidr-ticker-item-new {
   animation: gidr-item-enter-rtl 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
