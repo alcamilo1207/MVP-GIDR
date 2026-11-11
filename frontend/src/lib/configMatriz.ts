@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { Nivel } from './types'
 
 export interface EscalaSeveridad {
@@ -165,6 +166,32 @@ export function restablecerConfigMatriz(): ConfigMatrizRiesgo {
   return CONFIG_MATRIZ_DEFECTO
 }
 
+const FREC_CANONICA_IDX: Record<string, number> = {
+  A: 0,
+  B: 1,
+  C: 2,
+  D: 3,
+  E: 4,
+}
+
+/**
+ * Obtiene la coordenada visual de la celda en la matriz del Dashboard (ej. "A5", "B4", "C3", "D2", "E1").
+ */
+export function obtenerCoordenadaCelda(
+  frecuenciaCod: string,
+  severidadNum: number,
+  cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
+): string {
+  const idxCanon = FREC_CANONICA_IDX[frecuenciaCod?.toUpperCase()]
+  const f =
+    cfg.frecuencias.find((item) => item.codigo === frecuenciaCod) ||
+    (idxCanon !== undefined ? cfg.frecuencias.find((item) => item.idx === idxCanon) : undefined)
+  const s = cfg.severidades.find((item) => item.num === severidadNum)
+  const fCod = f ? f.codigo : frecuenciaCod
+  const sCod = s ? s.codigo : String(severidadNum)
+  return `${fCod}${sCod}`
+}
+
 /**
  * Calcula el puntaje numérico de una celda: peso de frecuencia (1-5) * número de severidad (1-5).
  */
@@ -173,7 +200,10 @@ export function calcularPuntaje(
   severidadNum: number,
   cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
 ): number {
-  const f = cfg.frecuencias.find((item) => item.codigo === frecuenciaCod)
+  const idxCanon = FREC_CANONICA_IDX[frecuenciaCod?.toUpperCase()]
+  const f =
+    cfg.frecuencias.find((item) => item.codigo === frecuenciaCod) ||
+    (idxCanon !== undefined ? cfg.frecuencias.find((item) => item.idx === idxCanon) : undefined)
   const peso = f ? f.peso : 1
   return Math.max(1, Math.min(25, peso * severidadNum))
 }
@@ -204,11 +234,19 @@ export function obtenerNivelCelda(
   severidadNum: number,
   cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
 ): Nivel {
-  const clave = `${frecuenciaCod}-${severidadNum}`
+  const idxCanon = FREC_CANONICA_IDX[frecuenciaCod?.toUpperCase()]
+  const f =
+    cfg.frecuencias.find((item) => item.codigo === frecuenciaCod) ||
+    (idxCanon !== undefined ? cfg.frecuencias.find((item) => item.idx === idxCanon) : undefined)
+  const fCod = f ? f.codigo : frecuenciaCod
+  const clave = `${fCod}-${severidadNum}`
   if (cfg.celdasPersonalizadas && cfg.celdasPersonalizadas[clave]) {
     return cfg.celdasPersonalizadas[clave]
   }
-  const puntaje = calcularPuntaje(frecuenciaCod, severidadNum, cfg)
+  if (cfg.celdasPersonalizadas && cfg.celdasPersonalizadas[`${frecuenciaCod}-${severidadNum}`]) {
+    return cfg.celdasPersonalizadas[`${frecuenciaCod}-${severidadNum}`]
+  }
+  const puntaje = calcularPuntaje(fCod, severidadNum, cfg)
   return obtenerNivelPorPuntaje(puntaje, cfg)
 }
 
@@ -246,5 +284,56 @@ export function obtenerEstilosResaltado(nivel: Nivel | string) {
         text: 'text-emerald-700 dark:text-emerald-300 font-semibold',
         dot: 'bg-emerald-500',
       }
+  }
+}
+
+/**
+ * Retorna el código hexadecimal configurado para un nivel de criticidad.
+ */
+export function obtenerColorNivel(
+  nivel: Nivel | string,
+  cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
+): string {
+  const u = cfg.umbrales?.find((x) => x.nivel === nivel)
+  if (u && u.colorHex) return u.colorHex
+  switch (nivel) {
+    case 'Extremo':
+      return '#dc2626'
+    case 'Alto':
+      return '#f97316'
+    case 'Medio':
+      return '#eab308'
+    case 'Bajo':
+    default:
+      return '#10b981'
+  }
+}
+
+/**
+ * Calcula si el texto sobre un fondo hexadecimal debe ser oscuro (#0f172a) o claro (#ffffff)
+ * para garantizar contraste óptimo de lectura (fórmula de luminancia percibida YIQ).
+ */
+export function obtenerColorTextoContraste(hexColor: string): string {
+  if (!hexColor || !hexColor.startsWith('#')) return '#ffffff'
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16) || 0
+  const g = parseInt(hex.substring(2, 4), 16) || 0
+  const b = parseInt(hex.substring(4, 6), 16) || 0
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000
+  return yiq >= 150 ? '#0f172a' : '#ffffff'
+}
+
+/**
+ * Retorna el estilo CSS para una celda de riesgo sólido (PHA-Pro / LOPA) usando los colores configurados.
+ */
+export function obtenerEstiloCeldaRiesgo(
+  nivel: Nivel | string,
+  cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
+): React.CSSProperties {
+  const bg = obtenerColorNivel(nivel, cfg)
+  const fg = obtenerColorTextoContraste(bg)
+  return {
+    backgroundColor: bg,
+    color: fg,
   }
 }

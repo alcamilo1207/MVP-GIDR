@@ -3,8 +3,16 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import type { Escenario, Pagina, Unidad } from '../lib/types'
+import type { Escenario, Pagina, Unidad, Nivel } from '../lib/types'
 import { ESTADOS, ESTADO_ETIQUETA } from '../lib/format'
+import {
+  ConfigMatrizRiesgo,
+  obtenerConfigMatriz,
+  obtenerNivelCelda,
+  obtenerCoordenadaCelda,
+  obtenerEstiloCeldaRiesgo,
+  EVENTO_CONFIG_CAMBIADA,
+} from '../lib/configMatriz'
 
 export const FRECUENCIAS = ['A', 'B', 'C', 'D', 'E'] as const
 
@@ -57,14 +65,14 @@ export function formatearFrecuenciaCuantitativa(n: number): string {
   return n.toExponential(1).replace('+', '')
 }
 
-// --- Motor de cálculo reactivo en cliente (espejo de backend/app/domain/engine/core.py) ---
+// --- Motor de cálculo reactivo en cliente (espejo unificado con Matriz 5x5 y Dashboard) ---
 const ORDEN_FREC = ['E', 'D', 'C', 'B', 'A'] as const
-const MATRIZ_DEFECTO: Record<string, string[]> = {
-  E: ['Bajo', 'Bajo', 'Bajo', 'Medio', 'Medio'],
-  D: ['Bajo', 'Bajo', 'Medio', 'Medio', 'Alto'],
-  C: ['Bajo', 'Medio', 'Medio', 'Alto', 'Extremo'],
-  B: ['Medio', 'Medio', 'Alto', 'Extremo', 'Extremo'],
-  A: ['Medio', 'Alto', 'Extremo', 'Extremo', 'Extremo'],
+
+const NIVEL_ORDEN: Record<string, number> = {
+  Bajo: 1,
+  Medio: 2,
+  Alto: 3,
+  Extremo: 4,
 }
 
 const MULT_ESTADO: Record<string, number> = {
@@ -95,37 +103,14 @@ function reducirIndice(idxInicial: number, frrTotal: number): number {
   return Math.max(0, idxInicial - saltos)
 }
 
-function nivelMatriz(idxFrec: number, impacto: number): string {
+function nivelMatriz(
+  idxFrec: number,
+  impacto: number,
+  cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
+): Nivel {
   const f = ORDEN_FREC[Math.max(0, Math.min(4, idxFrec))]
-  const col = Math.max(0, Math.min(4, impacto - 1))
-  return MATRIZ_DEFECTO[f][col]
-}
-
-// Colores sólidos estilo PHA-Pro / LOPA RR cell
-function colorCeldaRiesgo(nivel: string): string {
-  switch (nivel) {
-    case 'Extremo':
-      return 'bg-[#b91c1c] text-white font-bold'
-    case 'Alto':
-      return 'bg-[#ea580c] text-white font-bold'
-    case 'Medio':
-      return 'bg-[#facc15] text-slate-900 font-bold'
-    default:
-      return 'bg-[#22c55e] text-slate-900 font-bold'
-  }
-}
-
-function codigoRiesgo(nivel: string): string {
-  switch (nivel) {
-    case 'Extremo':
-      return '4 (Ext)'
-    case 'Alto':
-      return '3 (Alto)'
-    case 'Medio':
-      return '2 (Med)'
-    default:
-      return '1 (Bajo)'
-  }
+  const s = Math.max(1, Math.min(5, impacto))
+  return obtenerNivelCelda(f, s, cfg)
 }
 
 type RolBarrera = 'PREVENTIVA' | 'REACTIVA' | 'TEMPORAL'
@@ -240,7 +225,10 @@ function crearBorrador(e: Escenario): EscenarioEditable {
   }
 }
 
-function evaluarBorrador(d: EscenarioEditable) {
+function evaluarBorrador(
+  d: EscenarioEditable,
+  cfg: ConfigMatrizRiesgo = obtenerConfigMatriz()
+) {
   const numDis =
     d.frecuencia_diseno_num !== undefined &&
     d.frecuencia_diseno_num !== '' &&
@@ -270,41 +258,77 @@ function evaluarBorrador(d: EscenarioEditable) {
     }
   }
 
-  const idxPrevDis = reducirIndice(idxBase, prodPrevDiseno)
-  const idxDisFinal = reducirIndice(idxPrevDis, prodMitDiseno)
+  const frrDisenoTotal = prodPrevDiseno * prodMitDiseno
+  const idxDisFinal = reducirIndice(idxBase, frrDisenoTotal)
+  const frecDisenoLetra = ORDEN_FREC[idxDisFinal]
 
-  // Cálculo cuantitativo dinámico de frecuencia actual
-  const frecActNum = numDis / Math.max(1.0, prodPrevActual)
-  const frecActualLetra = frecuenciaNumeroALetra(frecActNum)
+  // Cálculo unificado de frecuencia actual (incluye salvaguardas preventivas, reactivas y temporales activas)
+  const frrActualTotal = prodPrevActual * prodMitActual
+  const frecActNum = numDis / Math.max(1.0, frrActualTotal)
   const frecActualDisplay = formatearFrecuenciaCuantitativa(frecActNum)
+  const idxActFinal = reducirIndice(idxBase, frrActualTotal)
+  const frecActualLetra = ORDEN_FREC[idxActFinal]
 
-  const idxPrevAct = Math.max(0, ORDEN_FREC.indexOf(frecActualLetra))
-  const idxActFinal = reducirIndice(idxPrevAct, prodMitActual)
-
-  const severidadMax = Math.max(
+  const impactosLista = [
     d.imp_economico,
     d.imp_personas,
     d.imp_ambiente,
-    d.imp_reputacion
-  )
+    d.imp_reputacion,
+  ]
+
+  const resolverGobernante = (idxFrec: number): { sev: number; nivel: Nivel } => {
+    let mejorSev = impactosLista[0]
+    let mejorNivel = nivelMatriz(idxFrec, mejorSev, cfg)
+    for (const s of impactosLista) {
+      const niv = nivelMatriz(idxFrec, s, cfg)
+      const ordNiv = NIVEL_ORDEN[niv] || 0
+      const ordMejor = NIVEL_ORDEN[mejorNivel] || 0
+      if (ordNiv > ordMejor || (ordNiv === ordMejor && s > mejorSev)) {
+        mejorNivel = niv
+        mejorSev = s
+      }
+    }
+    return { sev: mejorSev, nivel: mejorNivel }
+  }
+
+  const riesgoDisE = nivelMatriz(idxDisFinal, d.imp_economico, cfg)
+  const riesgoDisP = nivelMatriz(idxDisFinal, d.imp_personas, cfg)
+  const riesgoDisA = nivelMatriz(idxDisFinal, d.imp_ambiente, cfg)
+  const riesgoDisR = nivelMatriz(idxDisFinal, d.imp_reputacion, cfg)
+  const gobDis = resolverGobernante(idxDisFinal)
+
+  const riesgoActE = nivelMatriz(idxActFinal, d.imp_economico, cfg)
+  const riesgoActP = nivelMatriz(idxActFinal, d.imp_personas, cfg)
+  const riesgoActA = nivelMatriz(idxActFinal, d.imp_ambiente, cfg)
+  const riesgoActR = nivelMatriz(idxActFinal, d.imp_reputacion, cfg)
+  const gobAct = resolverGobernante(idxActFinal)
 
   return {
+    frecuencia_diseno_resid: frecDisenoLetra,
     frecuencia_actual: frecActualLetra,
     frecuencia_actual_num: frecActNum,
     frecuencia_actual_display: frecActualDisplay,
-    riesgo_diseno_global: nivelMatriz(idxDisFinal, severidadMax),
-    riesgo_actual_global: nivelMatriz(idxActFinal, severidadMax),
+    riesgo_diseno_global: gobDis.nivel,
+    coord_diseno_global: obtenerCoordenadaCelda(frecDisenoLetra, gobDis.sev, cfg),
+    riesgo_actual_global: gobAct.nivel,
+    coord_actual_global: obtenerCoordenadaCelda(frecActualLetra, gobAct.sev, cfg),
     riesgo_diseno_imp: {
-      economico: nivelMatriz(idxDisFinal, d.imp_economico),
-      personas: nivelMatriz(idxDisFinal, d.imp_personas),
-      ambiente: nivelMatriz(idxDisFinal, d.imp_ambiente),
-      reputacion: nivelMatriz(idxDisFinal, d.imp_reputacion),
+      economico: riesgoDisE,
+      personas: riesgoDisP,
+      ambiente: riesgoDisA,
+      reputacion: riesgoDisR,
     },
     riesgo_actual_imp: {
-      economico: nivelMatriz(idxActFinal, d.imp_economico),
-      personas: nivelMatriz(idxActFinal, d.imp_personas),
-      ambiente: nivelMatriz(idxActFinal, d.imp_ambiente),
-      reputacion: nivelMatriz(idxActFinal, d.imp_reputacion),
+      economico: riesgoActE,
+      personas: riesgoActP,
+      ambiente: riesgoActA,
+      reputacion: riesgoActR,
+    },
+    coord_actual_imp: {
+      economico: obtenerCoordenadaCelda(frecActualLetra, d.imp_economico, cfg),
+      personas: obtenerCoordenadaCelda(frecActualLetra, d.imp_personas, cfg),
+      ambiente: obtenerCoordenadaCelda(frecActualLetra, d.imp_ambiente, cfg),
+      reputacion: obtenerCoordenadaCelda(frecActualLetra, d.imp_reputacion, cfg),
     },
   }
 }
@@ -368,6 +392,15 @@ export function Escenarios() {
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
   const [seleccion, setSeleccion] = useState<SeleccionCelda | null>(null)
   const [escenarioEnfocado, setEscenarioEnfocado] = useState<number | null>(escenarioIdParam)
+  const [configMatriz, setConfigMatriz] = useState<ConfigMatrizRiesgo>(obtenerConfigMatriz())
+
+  useEffect(() => {
+    const handler = () => {
+      setConfigMatriz(obtenerConfigMatriz())
+    }
+    window.addEventListener(EVENTO_CONFIG_CAMBIADA, handler)
+    return () => window.removeEventListener(EVENTO_CONFIG_CAMBIADA, handler)
+  }, [])
 
   const unidades = useQuery({
     queryKey: ['unidades'],
@@ -950,13 +983,14 @@ export function Escenarios() {
     const filas: string[] = [
       [
         'Nodo', 'Desviacion', 'Consecuencia', 'Causa', 'Fdis', 'Salvaguarda', 'Tipo', 'Tag',
-        'FRRd', 'Estado', 'Degr%', 'FRRa', 'E', 'P', 'A', 'R', 'Riesgo Diseno', 'Riesgo Actual',
+        'FRRd', 'Estado', 'Degr%', 'FRRa', 'E', 'P', 'A', 'R', 'Riesgo Diseno',
+        'RR Economico', 'RR Personas', 'RR Ambiental', 'RR Reputacion', 'Riesgo Actual Global',
       ].join(','),
     ]
     for (const d of jerarquia) {
       for (const c of d.consecuencias) {
         for (const ca of c.causas) {
-          const calc = evaluarBorrador(ca)
+          const calc = evaluarBorrador(ca, configMatriz)
           const bars = ca.barreras.length > 0 ? ca.barreras : [null]
           for (const b of bars) {
             filas.push(
@@ -967,7 +1001,12 @@ export function Escenarios() {
                 b?.estado_actual ?? '', b?.factor_degradacion ?? '',
                 b ? calcFrrActual(b.frr_diseno, b.estado_actual, b.factor_degradacion) : '',
                 ca.imp_economico, ca.imp_personas, ca.imp_ambiente, ca.imp_reputacion,
-                calc.riesgo_diseno_global, calc.riesgo_actual_global,
+                `${calc.coord_diseno_global} (${calc.riesgo_diseno_global})`,
+                `${calc.coord_actual_imp.economico} (${calc.riesgo_actual_imp.economico})`,
+                `${calc.coord_actual_imp.personas} (${calc.riesgo_actual_imp.personas})`,
+                `${calc.coord_actual_imp.ambiente} (${calc.riesgo_actual_imp.ambiente})`,
+                `${calc.coord_actual_imp.reputacion} (${calc.riesgo_actual_imp.reputacion})`,
+                `${calc.coord_actual_global} (${calc.riesgo_actual_global})`,
               ]
                 .map(esc)
                 .join(',')
@@ -1027,19 +1066,19 @@ export function Escenarios() {
           <div>
             <div className="font-semibold text-slate-900 dark:text-slate-100">2. Frecuencia Actual (F_a)</div>
             <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-              <code>idx(F_a) = max(0, idx(F_d) - ⌊log10(∏ FRR_act_prev × ∏ FRR_act_temp)⌋)</code>
+              <code>idx(F_a) = max(0, idx(F_d) - ⌊log10(∏ FRR_act_prev × ∏ FRR_act_react × ∏ FRR_act_temp)⌋)</code>
             </div>
           </div>
           <div>
             <div className="font-semibold text-slate-900 dark:text-slate-100">3. Riesgo de Diseño (RD)</div>
             <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-              Matriz 5×5 evaluada con <code>F_d</code> reducida por barreras preventivas y reactivas de diseño.
+              Coordenada <code>F_d_res(A–E) + S(1–5)</code> y nivel en la matriz 5×5 del Dashboard.
             </div>
           </div>
           <div>
-            <div className="font-semibold text-slate-900 dark:text-slate-100">4. Riesgo Actual por Impacto (E, P, A, R)</div>
+            <div className="font-semibold text-slate-900 dark:text-slate-100">4. Riesgo Actual (RR: E, P, A, R y Global)</div>
             <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-              Matriz 5×5 evaluada con <code>F_a</code> reducida por barreras reactivas actuales para cada severidad <code>1–5</code>.
+              Coordenada de la matriz 5×5 del Dashboard <code>F_a(A–E) + S(1–5)</code> (ej. <code>A5, B4, C3, D2, E1</code>) con su color de criticidad.
             </div>
           </div>
         </div>
@@ -1225,7 +1264,7 @@ export function Escenarios() {
                   </span>
                 </th>
                 <th
-                  colSpan={21}
+                  colSpan={22}
                   className="border border-slate-300 dark:border-slate-700 px-2 py-1 text-center bg-[#e4e7ec] dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 tracking-wide"
                 >
                   Consecuencias
@@ -1287,8 +1326,8 @@ export function Escenarios() {
                   Diseño
                 </th>
                 <th
-                  colSpan={4}
-                  title="Riesgo Actual calculado para cada dimensión de impacto (Económico, Personas, Ambiental, Reputación)"
+                  colSpan={5}
+                  title="Riesgo Actual calculado para cada dimensión de impacto (Económico, Personas, Ambiental, Reputación) y Global"
                   className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center bg-[#ebedf0] dark:bg-slate-800"
                 >
                   Riesgo Actual (RR)
@@ -1392,6 +1431,12 @@ export function Escenarios() {
                 >
                   R
                 </th>
+                <th
+                  title="Riesgo Actual Global (máximo nivel entre todos los impactos)"
+                  className="border border-slate-300 dark:border-slate-700 px-1 py-1 text-center w-[68px] min-w-[68px] bg-[#ebedf0] dark:bg-slate-800 font-bold"
+                >
+                  Global
+                </th>
               </tr>
             </thead>
 
@@ -1402,7 +1447,7 @@ export function Escenarios() {
 
                 return grupoDesv.consecuencias.flatMap((grupoCons, consIdx) =>
                   grupoCons.causas.flatMap((causaEsc, causaIdx) => {
-                    const calc = evaluarBorrador(causaEsc)
+                    const calc = evaluarBorrador(causaEsc, configMatriz)
                     const barreras =
                       causaEsc.barreras.length > 0
                         ? causaEsc.barreras
@@ -2130,34 +2175,58 @@ export function Escenarios() {
                               <td
                                 rowSpan={causaEsc.filasBarrera}
                                 onClick={() => seleccionar(`riesgo-dis-${causaEsc.id}`, null)}
-                                className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] cursor-pointer ${colorCeldaRiesgo(
-                                  calc.riesgo_diseno_global
-                                )}`}
+                                title={`Riesgo de Diseño Global: ${calc.coord_diseno_global} (${calc.riesgo_diseno_global})`}
+                                style={obtenerEstiloCeldaRiesgo(calc.riesgo_diseno_global, configMatriz)}
+                                className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
                               >
-                                {codigoRiesgo(calc.riesgo_diseno_global)}
+                                <div className="flex flex-col items-center justify-center leading-tight">
+                                  <span className="font-mono font-extrabold text-xs">
+                                    {calc.coord_diseno_global}
+                                  </span>
+                                  <span className="text-[9.5px] font-semibold opacity-90">
+                                    ({calc.riesgo_diseno_global})
+                                  </span>
+                                </div>
                               </td>
 
-                              {/* Riesgo Actual por cada tipo de impacto (E, P, A, R) estilo columna RR */}
+                              {/* Riesgo Actual por cada tipo de impacto (E, P, A, R) estilo coordenada Matriz Dashboard (A5, B4, C3, D2, E1) */}
                               {(
                                 [
-                                  ['economico', calc.riesgo_actual_imp.economico],
-                                  ['personas', calc.riesgo_actual_imp.personas],
-                                  ['ambiente', calc.riesgo_actual_imp.ambiente],
-                                  ['reputacion', calc.riesgo_actual_imp.reputacion],
+                                  ['economico', calc.riesgo_actual_imp.economico, calc.coord_actual_imp.economico],
+                                  ['personas', calc.riesgo_actual_imp.personas, calc.coord_actual_imp.personas],
+                                  ['ambiente', calc.riesgo_actual_imp.ambiente, calc.coord_actual_imp.ambiente],
+                                  ['reputacion', calc.riesgo_actual_imp.reputacion, calc.coord_actual_imp.reputacion],
                                 ] as const
-                              ).map(([k, niv]) => (
+                              ).map(([k, niv, coord]) => (
                                 <td
                                   key={k}
                                   rowSpan={causaEsc.filasBarrera}
                                   onClick={() => seleccionar(`riesgo-act-${k}-${causaEsc.id}`, null)}
-                                  title={`Riesgo Actual (${k}): ${niv}`}
-                                  className={`border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] cursor-pointer ${colorCeldaRiesgo(
-                                    niv
-                                  )}`}
+                                  title={`Riesgo Actual (${k}): ${coord} (${niv})`}
+                                  style={obtenerEstiloCeldaRiesgo(niv, configMatriz)}
+                                  className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-xs font-mono font-extrabold cursor-pointer transition-colors shadow-2xs"
                                 >
-                                  {niv[0]}
+                                  {coord}
                                 </td>
                               ))}
+
+                              {/* Riesgo Actual Global luego de R */}
+                              <td
+                                rowSpan={causaEsc.filasBarrera}
+                                onClick={() => seleccionar(`riesgo-act-global-${causaEsc.id}`, null)}
+                                title={`Riesgo Actual Global: ${calc.coord_actual_global} (${calc.riesgo_actual_global})`}
+                                style={obtenerEstiloCeldaRiesgo(calc.riesgo_actual_global, configMatriz)}
+                                className="border border-slate-300 dark:border-slate-700 p-1 text-center align-top text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                              >
+                                <div className="flex flex-col items-center justify-center leading-tight">
+                                  <span className="font-mono font-extrabold text-xs">
+                                    {calc.coord_actual_global}
+                                  </span>
+                                  <span className="text-[9.5px] font-semibold opacity-90">
+                                    ({calc.riesgo_actual_global})
+                                  </span>
+                                </div>
+                              </td>
 
                               {/* 7. RECOMENDACIONES PHA (rowSpan por Causa) - Solo lectura, clic navega a Recomendaciones */}
                               <td
@@ -2238,7 +2307,7 @@ export function Escenarios() {
               {jerarquia.length === 0 && (
                 <tr>
                   <td
-                    colSpan={24}
+                    colSpan={25}
                     className="p-8 text-center text-slate-400 text-sm"
                   >
                     No se encontraron escenarios PHA para los filtros seleccionados.

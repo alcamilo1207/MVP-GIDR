@@ -9,6 +9,8 @@ import {
   obtenerConfigMatriz,
   obtenerNivelCelda,
   obtenerEstilosResaltado,
+  obtenerColorNivel,
+  obtenerColorTextoContraste,
   EVENTO_CONFIG_CAMBIADA,
 } from '../lib/configMatriz'
 
@@ -225,13 +227,8 @@ export const Dashboard: React.FC = () => {
           sev = esc[dim.severidadKey] || 1
         }
 
-        const riesgoDiseno =
-          (dim.id !== 'global' && esc.riesgo_diseno_imp?.[dim.id]) ||
-          obtenerNivelCelda(frecDis, sev, configMatriz)
-
-        const riesgoActual =
-          (dim.id !== 'global' && esc.riesgo_actual_imp?.[dim.id]) ||
-          obtenerNivelCelda(frecAct, sev, configMatriz)
+        const riesgoDiseno = obtenerNivelCelda(frecDis, sev, configMatriz)
+        const riesgoActual = obtenerNivelCelda(frecAct, sev, configMatriz)
 
         const brecha = Math.max(0, nivelScore(riesgoActual) - nivelScore(riesgoDiseno))
 
@@ -343,15 +340,8 @@ export const Dashboard: React.FC = () => {
                   const esCeldaSeleccionada =
                     celdaFiltro?.frec === frec.codigo && celdaFiltro?.sev === sev.num
 
-                  // Estilos de fondo según nivel de criticidad
-                  let bgNivel = 'bg-emerald-200/90 dark:bg-emerald-950/70 text-emerald-950 dark:text-emerald-100'
-                  if (celda.nivel === 'Extremo') {
-                    bgNivel = 'bg-red-500 dark:bg-red-950/80 text-white'
-                  } else if (celda.nivel === 'Alto') {
-                    bgNivel = 'bg-orange-400 dark:bg-orange-950/75 text-orange-950 dark:text-orange-100'
-                  } else if (celda.nivel === 'Medio') {
-                    bgNivel = 'bg-amber-300 dark:bg-amber-950/70 text-amber-950 dark:text-amber-100'
-                  }
+                  const hexColor = obtenerColorNivel(celda.nivel, configMatriz)
+                  const textColor = obtenerColorTextoContraste(hexColor)
 
                   return (
                     <td
@@ -363,13 +353,17 @@ export const Dashboard: React.FC = () => {
                           setCeldaFiltro({ frec: frec.codigo, sev: sev.num })
                         }
                       }}
+                      style={{
+                        backgroundColor: tieneActivos ? `${hexColor}e6` : `${hexColor}33`,
+                        color: tieneActivos ? textColor : undefined,
+                      }}
                       title={`Celda ${frec.codigo}${sev.codigo} (${celda.nivel}): ${celda.actual} actual(es), ${celda.diseno} de diseño. Haz clic para filtrar escenarios.`}
                       className={`border border-slate-400/50 dark:border-slate-700 ${
                         compacta ? 'h-12' : 'h-16'
-                      } p-0 align-top transition-all cursor-pointer ${bgNivel} ${
+                      } p-0 align-top transition-all cursor-pointer ${
                         tieneActivos
                           ? 'opacity-100 ring-1 ring-inset ring-slate-900/20 dark:ring-white/20 shadow-xs'
-                          : 'opacity-30 saturate-50 hover:opacity-60'
+                          : 'opacity-40 saturate-50 hover:opacity-75'
                       } ${
                         esCeldaSeleccionada
                           ? 'ring-3 ring-sky-600 dark:ring-sky-400 z-20 scale-[1.03] shadow-md'

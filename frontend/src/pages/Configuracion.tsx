@@ -6,6 +6,8 @@ import {
   guardarConfigMatriz,
   restablecerConfigMatriz,
   obtenerNivelPorPuntaje,
+  obtenerColorTextoContraste,
+  obtenerEstiloCeldaRiesgo,
   NIVELES_CRITICIDAD_INFO,
 } from '../lib/configMatriz'
 
@@ -73,7 +75,11 @@ export const Configuracion: React.FC = () => {
   }
 
   // Modificar umbrales
-  const actualizarUmbral = (index: number, campo: 'min' | 'max' | 'etiqueta', valor: string | number) => {
+  const actualizarUmbral = (
+    index: number,
+    campo: 'min' | 'max' | 'etiqueta' | 'colorHex',
+    valor: string | number
+  ) => {
     const copia = [...config.umbrales]
     copia[index] = { ...copia[index], [campo]: valor }
     setConfig({ ...config, umbrales: copia })
@@ -283,23 +289,15 @@ export const Configuracion: React.FC = () => {
                         const clave = `${f.codigo}-${s.num}`
                         const nivelManual = config.celdasPersonalizadas?.[clave]
                         const nivel = nivelManual || obtenerNivelPorPuntaje(puntaje, config)
-
-                        // Color de celda
-                        let bgClase = 'bg-emerald-200/90 dark:bg-emerald-950/70 text-emerald-950 dark:text-emerald-100 border-emerald-400'
-                        if (nivel === 'Extremo') {
-                          bgClase = 'bg-red-500/90 dark:bg-red-950/80 text-white border-red-600 shadow-2xs'
-                        } else if (nivel === 'Alto') {
-                          bgClase = 'bg-orange-400/90 dark:bg-orange-950/75 text-orange-950 dark:text-orange-100 border-orange-500'
-                        } else if (nivel === 'Medio') {
-                          bgClase = 'bg-amber-300/90 dark:bg-amber-950/70 text-amber-950 dark:text-amber-100 border-amber-400'
-                        }
+                        const estiloCelda = obtenerEstiloCeldaRiesgo(nivel, config)
 
                         return (
                           <td
                             key={`${f.codigo}-${s.num}`}
                             onClick={() => alternarCeldaManual(f.codigo, s.num)}
+                            style={estiloCelda}
                             title={`Celda ${f.codigo}${s.codigo} · Puntaje ${puntaje} pts (${nivel})${nivelManual ? ' [Modo manual activado]' : ''}. Clic para alternar nivel.`}
-                            className={`border border-slate-400/50 dark:border-slate-700 h-16 p-1.5 align-middle text-center cursor-pointer hover:scale-[1.02] hover:z-10 transition-all ${bgClase}`}
+                            className="border border-slate-400/50 dark:border-slate-700 h-16 p-1.5 align-middle text-center cursor-pointer hover:scale-[1.02] hover:z-10 transition-all shadow-2xs"
                           >
                             <div className="flex flex-col items-center justify-center h-full">
                               <span className="text-[11px] font-extrabold tracking-tight">
@@ -604,31 +602,53 @@ export const Configuracion: React.FC = () => {
                   style={{ borderTop: `4px solid ${u.colorHex}` }}
                 >
                   <div className="flex items-center justify-between">
-                    <span
-                      className="px-2.5 py-0.5 rounded text-xs font-bold"
-                      style={{
-                        backgroundColor: `${u.colorHex}25`,
-                        color: u.colorHex,
-                        border: `1px solid ${u.colorHex}40`,
-                      }}
-                    >
-                      {u.nivel}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={u.colorHex}
+                        onChange={(e) => actualizarUmbral(idx, 'colorHex', e.target.value)}
+                        className="w-7 h-7 p-0.5 rounded border border-slate-300 dark:border-slate-700 cursor-pointer bg-transparent"
+                        title={`Cambiar color para el nivel ${u.nivel}`}
+                      />
+                      <span
+                        className="px-2.5 py-0.5 rounded text-xs font-bold shadow-2xs"
+                        style={{
+                          backgroundColor: u.colorHex,
+                          color: obtenerColorTextoContraste(u.colorHex),
+                        }}
+                      >
+                        {u.nivel}
+                      </span>
+                    </div>
                     <span className="text-[11px] font-mono text-slate-400">
                       Rango [{u.min} — {u.max}]
                     </span>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                      Descripción de Criterio
-                    </label>
-                    <input
-                      type="text"
-                      value={u.etiqueta}
-                      onChange={(e) => actualizarUmbral(idx, 'etiqueta', e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-sky-500"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                        Color Hexadecimal
+                      </label>
+                      <input
+                        type="text"
+                        value={u.colorHex}
+                        onChange={(e) => actualizarUmbral(idx, 'colorHex', e.target.value)}
+                        className="w-full font-mono text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-sky-500"
+                        placeholder="#10b981"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                        Criterio
+                      </label>
+                      <input
+                        type="text"
+                        value={u.etiqueta}
+                        onChange={(e) => actualizarUmbral(idx, 'etiqueta', e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-slate-700">
